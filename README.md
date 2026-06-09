@@ -28,28 +28,64 @@ A .NET 10 SDK for [MXC (Microsoft eXecution Containers)](https://github.com/micr
 
 ## Policy enforcement in action
 
-One small probe tries two things: fetch a URL over the network and read a secret file that lives *outside* its workspace. The SDK runs that **same probe twice** through `MxcSdk.SpawnSandboxAsync`, changing nothing but the `SandboxPolicy`:
+One small probe does two things a workload usually should not: it reaches the network, then reads an SSH private key that lives *outside* its workspace. The SDK runs that **same probe twice** through `MxcSdk.SpawnSandboxAsync`, changing nothing but the `SandboxPolicy`:
+
+```csharp
+// probe.sh, run unchanged under both policies:
+//   curl https://api.github.com/zen     # reach the network
+//   cat  ~/.ssh/id_ed25519              # read a credential outside the workspace
+string command = "sh probe.sh";
+
+// WITHOUT restrictions: outbound allowed, the credential's folder is readable.
+var permissive = new SandboxPolicy
+{
+    Version = "0.6.0-alpha",
+    Network = new NetworkPolicy { AllowOutbound = true },
+    Filesystem = new FilesystemPolicy { ReadwritePaths = [root] },
+};
+
+// WITH policy: no outbound, only the workspace is exposed.
+var restrictive = new SandboxPolicy
+{
+    Version = "0.6.0-alpha",
+    Network = new NetworkPolicy { AllowOutbound = false },
+    Filesystem = new FilesystemPolicy { ReadwritePaths = [workspace] },
+};
+
+// Same command, same call — only the policy changes.
+foreach (var policy in new[] { permissive, restrictive })
+{
+    var result = await MxcSdk.SpawnSandboxAsync(command, policy);
+    Console.WriteLine(result.Stdout);
+}
+```
+
+Running it prints the two outcomes side by side:
 
 ```text
 $ dotnet run --project examples/10-policy-enforcement -c Release
 
-secret file: /tmp/mxc-policy-demo/secret.txt (outside the workspace)
+credential:  /tmp/mxc-policy-demo/home/.ssh/id_ed25519 (SSH private key, outside the workspace)
 workspace:   /tmp/mxc-policy-demo/workspace
 
-=== WITHOUT restrictions  (allowOutbound=true, secret folder readable) ===
+=== WITHOUT restrictions  (allowOutbound=true, credential folder readable) ===
 [network]    curl https://api.github.com/zen
-Anything added dilutes everything else.
-[filesystem] cat /tmp/mxc-policy-demo/secret.txt
-API_KEY=do-not-leak
+Non-blocking is better than blocking.
+[filesystem] cat /tmp/mxc-policy-demo/home/.ssh/id_ed25519
+-----BEGIN OPENSSH PRIVATE KEY-----
+b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
+ThisIsAFakeDemoKeyThatExistsOnlyToBeBlockedByPolicyDoNotUseItAnywhere==
+-----END OPENSSH PRIVATE KEY-----
 
 === WITH policy           (allowOutbound=false, only workspace readable) ===
 [network]    curl https://api.github.com/zen
 curl: (6) Could not resolve host: api.github.com
-[filesystem] cat /tmp/mxc-policy-demo/secret.txt
-cat: /tmp/mxc-policy-demo/secret.txt: No such file or directory
+
+[filesystem] cat /tmp/mxc-policy-demo/home/.ssh/id_ed25519
+cat: /tmp/mxc-policy-demo/home/.ssh/id_ed25519: No such file or directory
 ```
 
-Without the policy, the probe reaches GitHub (the quote is live, so it changes per run) and prints the secret. With the policy, both attempts fail at the kernel boundary: outbound traffic is gone because the sandbox runs in its own network namespace, and the secret reads as missing because the file was never mounted into the sandbox — denial by absence, not an error code. Same binary in both runs; only the policy differs. Full walkthrough: [`examples/10-policy-enforcement`](examples/10-policy-enforcement). Output captured on WSL2 (Ubuntu 24.04) with the Linux `lxc-exec` executor.
+Without the policy, the probe reaches GitHub (the quote is live, so it changes per run) and prints the private key. With the policy, both attempts fail at the kernel boundary: outbound traffic is gone because the sandbox runs in its own network namespace, and the key reads as missing because its folder was never mounted into the sandbox — denial by absence, not an error code. Same binary in both runs; only the policy differs. Full walkthrough: [`examples/10-policy-enforcement`](examples/10-policy-enforcement). Output captured on WSL2 (Ubuntu 24.04) with the Linux `lxc-exec` executor.
 
 ## Install
 

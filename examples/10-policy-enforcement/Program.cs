@@ -6,18 +6,25 @@ const string Url = "https://api.github.com/zen";
 
 bool isWindows = RuntimeInformation.IsOSPlatform(OSPlatform.Windows);
 
-// Lay out a workspace the sandbox is allowed to use, and a secret that sits OUTSIDE it.
+// Lay out a workspace the sandbox is allowed to use, and a sensitive credential that
+// sits OUTSIDE it — an SSH private key, the kind of file no workload should exfiltrate.
 string root = Path.Combine(Path.GetTempPath(), "mxc-policy-demo");
 string workspace = Path.Combine(root, "workspace");
 Directory.CreateDirectory(workspace);
 
-string secretPath = Path.Combine(root, "secret.txt");
-File.WriteAllText(secretPath, "API_KEY=do-not-leak");
+string credentialDir = Path.Combine(root, "home", ".ssh");
+Directory.CreateDirectory(credentialDir);
+string secretPath = Path.Combine(credentialDir, "id_ed25519");
+File.WriteAllText(secretPath,
+    "-----BEGIN OPENSSH PRIVATE KEY-----\n" +
+    "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n" +
+    "ThisIsAFakeDemoKeyThatExistsOnlyToBeBlockedByPolicyDoNotUseItAnywhere==\n" +
+    "-----END OPENSSH PRIVATE KEY-----\n");
 
 // The same probe runs in every sandbox: reach the network, then read the secret.
 string command = WriteProbe(workspace, secretPath, Url, isWindows);
 
-// "Without restrictions": outbound is allowed and the secret's folder is in the read/write set.
+// "Without restrictions": outbound is allowed and the credential's folder is in the read/write set.
 var permissive = new SandboxPolicy
 {
     Version = SchemaVersion,
@@ -25,7 +32,7 @@ var permissive = new SandboxPolicy
     Filesystem = new FilesystemPolicy { ReadwritePaths = [root] },
 };
 
-// "With policy": no outbound, and only the workspace is exposed — the secret is out of reach.
+// "With policy": no outbound, and only the workspace is exposed — the credential is out of reach.
 var restrictive = new SandboxPolicy
 {
     Version = SchemaVersion,
@@ -33,11 +40,11 @@ var restrictive = new SandboxPolicy
     Filesystem = new FilesystemPolicy { ReadwritePaths = [workspace] },
 };
 
-Console.WriteLine($"secret file: {secretPath} (outside the workspace)");
+Console.WriteLine($"credential:  {secretPath} (SSH private key, outside the workspace)");
 Console.WriteLine($"workspace:   {workspace}");
 Console.WriteLine();
 
-await RunUnder("WITHOUT restrictions  (allowOutbound=true, secret folder readable)", permissive);
+await RunUnder("WITHOUT restrictions  (allowOutbound=true, credential folder readable)", permissive);
 await RunUnder("WITH policy           (allowOutbound=false, only workspace readable)", restrictive);
 
 async Task RunUnder(string label, SandboxPolicy policy)

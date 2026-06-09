@@ -13,7 +13,7 @@ These are minimal, self-contained console demos for common SDK scenarios. Each p
 | `07-filesystem-access` | Grant, restrict, and deny filesystem paths in a policy. | No |
 | `08-network-restricted` | Allow outbound traffic to a single host only. | Yes |
 | `09-network-proxy` | Route sandbox traffic through a localhost or built-in test proxy. | No |
-| `10-policy-enforcement` | Run one probe (network call + secret read) under a permissive then a restrictive policy, side by side. | Yes |
+| `10-policy-enforcement` | Run one probe (network call + read of an SSH key outside the workspace) under a permissive then a restrictive policy, side by side. | Yes |
 
 Run one example:
 

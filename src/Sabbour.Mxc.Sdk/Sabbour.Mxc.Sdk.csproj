@@ -8,7 +8,6 @@
     <Description>.NET 10 SDK for MXC (Microsoft eXecution Containers) — a faithful port of @microsoft/mxc-sdk.</Description>
     <Authors>Ahmed Sabbour</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>
-    <!-- TODO: Replace with the actual repository URL once published -->
     <RepositoryUrl>https://github.com/sabbour/mxc-dotnet-sdk</RepositoryUrl>
     <PackageProjectUrl>https://github.com/sabbour/mxc-dotnet-sdk</PackageProjectUrl>
     <PackageTags>mxc;sandbox;containers;isolation;security</PackageTags>

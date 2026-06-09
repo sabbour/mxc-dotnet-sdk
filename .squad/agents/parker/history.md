@@ -20,3 +20,5 @@
 Scribe recorded Parker's port of upstream platform and sandbox unit tests into the parity suite. Outcome: 110 parity cases and 2 intentional Windows network-validation red flags: processcontainer `allowedHosts`/`blockedHosts` without `allowOutbound` currently builds in C# while upstream TypeScript throws, corroborating fidelity finding C3.
 
 - 2026-06-09T11:04:37-07:00: `examples/` landed with five console samples and the repository received its initial commit (`7f02054`) on `main`.
+
+- 2026-06-09T11:30:46-07:00: Added examples 06-09 from upstream docs scenarios; backend probe found only ARM64 Windows AppContainer/processcontainer at schema 0.4.0-alpha fully launches, while 0.6.0-alpha processcontainer fails E_NOTIMPL and other probed backends are unavailable/unsupported/host-absent.

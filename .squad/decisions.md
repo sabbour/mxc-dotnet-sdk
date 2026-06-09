@@ -254,3 +254,14 @@ Archived because this entry is older than 30 days and the merged decisions file 
 **What:** README now documents prebuilt MXC executor as primary integration-test setup
 **References:** README.md, VersionHelper.SupportedVersion=0.7.0-alpha (provided ground truth)
 **Why:** Updated README guidance for tests and native binary discovery: Tier 1 unit tests need no native binary; Tier 2 integration/e2e tests use the prebuilt `microsoft/mxc` `v0.6.1` `mxc-release-binaries.zip`, set `MXC_BIN_DIR` to the directory containing `<arch>\wxc-exec.exe`, set `MXC_INTEGRATION_TESTS=1`, and note the Windows 11 24H2/build 26100+ processcontainer requirement. README No CLI guidance was corrected to say the SDK searches `MXC_BIN_DIR/<arch>/wxc-exec.exe` and not PATH. The earlier schema wording in this inbox item is superseded by the 2026-06-09T11:04:37 examples policy schema pin decision above.
+
+
+## Session Merged Decisions — 2026-06-09T11-30-46Z
+
+### 2026-06-09T11:30:46-07:00: ARM64 Windows backend availability probe
+**By:** Scribe (requested by Ahmed Sabbour)
+
+- Empirical host finding: on this ARM64 Windows host, only `processcontainer` / AppContainer with policy schema `0.4.0-alpha` fully launched and exited 0 in the temporary gitignored probe.
+- `processcontainer` with `0.6.0-alpha` failed `E_NOTIMPL` with velocity keys `61389575` / `61155944` disabled.
+- `wslc` and `microvm` invoked the executor but returned exit `-1` because the host stack was absent; `microvm` correctly rejected a network policy.
+- `windows_sandbox` and `hyperlight` are `NotSupportedException` in the port; `isolation_session` is `BackendUnavailable` because the COM class is not registered.

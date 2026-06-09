@@ -1,0 +1,16 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <!-- Runtime dependencies (registered; not yet referenced) -->
+    <PackageVersion Include="NuGet.Versioning" Version="6.13.2" />
+    <PackageVersion Include="Porta.Pty" Version="1.0.7" />
+    <PackageVersion Include="Microsoft.Win32.Registry" Version="5.0.0" />
+    <!-- Test dependencies -->
+    <PackageVersion Include="xunit" Version="2.9.3" />
+    <PackageVersion Include="xunit.runner.visualstudio" Version="3.0.2" />
+    <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="17.14.1" />
+    <PackageVersion Include="NSubstitute" Version="5.3.0" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,25 @@
+<Solution>
+  <Folder Name="/examples/" />
+  <Folder Name="/examples/01-policy-to-config/">
+    <Project Path="examples/01-policy-to-config/PolicyToConfig.csproj" />
+  </Folder>
+  <Folder Name="/examples/02-platform-support/">
+    <Project Path="examples/02-platform-support/PlatformProbe.csproj" />
+  </Folder>
+  <Folder Name="/examples/03-buffered-spawn/">
+    <Project Path="examples/03-buffered-spawn/BufferedSpawn.csproj" />
+  </Folder>
+  <Folder Name="/examples/04-network-policy/">
+    <Project Path="examples/04-network-policy/HostFiltering.csproj" />
+  </Folder>
+  <Folder Name="/examples/05-state-aware-lifecycle/">
+    <Project Path="examples/05-state-aware-lifecycle/StateAwareLifecycle.csproj" />
+  </Folder>
+  <Folder Name="/src/">
+    <Project Path="src/Sabbour.Mxc.Sdk/Sabbour.Mxc.Sdk.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Sabbour.Mxc.Sdk.IntegrationTests/Sabbour.Mxc.Sdk.IntegrationTests.csproj" />
+    <Project Path="tests/Sabbour.Mxc.Sdk.Tests/Sabbour.Mxc.Sdk.Tests.csproj" />
+  </Folder>
+</Solution>

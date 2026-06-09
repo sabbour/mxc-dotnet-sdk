@@ -1,0 +1,12 @@
+{
+  "universe_usage_history": [
+    { "universe": "Alien", "assignment_id": "mxc-dotnet-sdk-port-001", "used_at": "2026-06-08T16:06:29-07:00" }
+  ],
+  "assignment_cast_snapsho2026-06-08T16:06:29-07:00": {
+    "mxc-dotnet-sdk-port-001": {
+      "universe": "Alien",
+      "agen2026-06-08T16:06:29-07:00": { "lead": "Ripley", "systems-dev": "Parker", "core-dev": "Brett", "tester": "Ash" },
+      "created_at": "2026-06-08T16:06:29-07:00"
+    }
+  }
+}

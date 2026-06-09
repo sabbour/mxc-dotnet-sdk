@@ -1,0 +1,15 @@
+{
+  "upstreamRepo": "microsoft/mxc",
+  "upstreamBranch": "main",
+  "upstreamPath": "sdk",
+  "lastSyncedCommit": "1736b48398c3fe4d1315b2311c0951cc893eb3ae",
+  "lastSyncedDate": "2026-06-08T21:32:26Z",
+  "log": [
+    {
+      "syncedAt": "2026-06-08T21:32:26Z",
+      "fromCommit": "161598fd08a4",
+      "toCommit": "1736b48398c3fe4d1315b2311c0951cc893eb3ae",
+      "note": "Baseline established. Port (P0-P6) aligned to upstream main tip at the time of the GPT-5.5 fidelity review and unit-test parity port."
+    }
+  ]
+}

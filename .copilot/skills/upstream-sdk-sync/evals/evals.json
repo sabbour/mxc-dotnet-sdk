@@ -1,0 +1,47 @@
+{
+  "skill_name": "upstream-sdk-sync",
+  "evals": [
+    {
+      "id": 0,
+      "name": "drift-check-clean-baseline",
+      "prompt": "Are we behind the upstream mxc SDK? Check if our port needs syncing and tell me what changed.",
+      "expected_output": "Runs the drift check from the checkpoint baseline, reports the number of upstream commits and SDK files changed since the baseline, and ends with a clear recommendation. With the current checkpoint (baseline = upstream main tip) it should report zero SDK drift and say the port is current, without inventing changes.",
+      "files": [],
+      "assertions": [
+        { "text": "Reads or references the .upstream-sync.json checkpoint to determine the baseline commit", "passed": null, "evidence": "" },
+        { "text": "Invokes the Get-UpstreamSdkChanges.ps1 helper (or the equivalent gh compare API call) rather than guessing", "passed": null, "evidence": "" },
+        { "text": "Correctly reports zero SDK file drift for the current baseline and states the port is up to date", "passed": null, "evidence": "" },
+        { "text": "Does not fabricate upstream commits or changes that the API did not return", "passed": null, "evidence": "" },
+        { "text": "Does not advance / overwrite the checkpoint when only reporting", "passed": null, "evidence": "" }
+      ]
+    },
+    {
+      "id": 1,
+      "name": "sync-plan-from-release-baseline",
+      "prompt": "Pretend our port was last synced at upstream commit 161598fd08a4 (the public release). Produce a sync plan showing what upstream SDK changes we'd need to port since then.",
+      "expected_output": "Computes the diff from 161598fd08a4 to upstream main, lists the intervening commits, and produces a sync plan table mapping each changed sdk/ file to its C# counterpart with a recommended action. src/platform.ts and src/types.ts map to their C# files and are marked to port; the unit test platform.test.ts maps to PlatformParityTests.cs; integration test and lockfile/npmrc changes are flagged as out-of-scope or config-only. Does not advance the checkpoint.",
+      "files": [],
+      "assertions": [
+        { "text": "Lists the upstream commits between 161598fd08a4 and main that touched sdk/", "passed": null, "evidence": "" },
+        { "text": "Maps sdk/src/platform.ts and sdk/src/types.ts to their C# counterparts using the module mapping", "passed": null, "evidence": "" },
+        { "text": "Maps the changed unit test (platform.test.ts) to PlatformParityTests.cs", "passed": null, "evidence": "" },
+        { "text": "Flags integration-test and build/config (.npmrc, package-lock.json) changes as out-of-scope or config-only rather than as portable C# edits", "passed": null, "evidence": "" },
+        { "text": "Outputs a structured sync plan (commits + per-file table + recommendation), not raw API JSON", "passed": null, "evidence": "" },
+        { "text": "References .squad/decisions.md as adaptations to respect, and does not advance the checkpoint in plan-only mode", "passed": null, "evidence": "" }
+      ]
+    },
+    {
+      "id": 2,
+      "name": "no-baseline-bootstrap",
+      "prompt": "I just set up the sync skill but there's no checkpoint yet. Help me figure out where to start syncing the SDK port from.",
+      "expected_output": "Detects the needs-baseline state, surfaces the current upstream tip and recent SDK-touching commits, and explains how to choose a baseline (the upstream commit the port currently reflects) before writing it into .upstream-sync.json. Does not blindly pick a baseline or start diffing against an arbitrary commit.",
+      "files": [],
+      "assertions": [
+        { "text": "Recognizes the missing/empty checkpoint and enters the baseline-bootstrap path instead of erroring out", "passed": null, "evidence": "" },
+        { "text": "Surfaces the current upstream tip and/or recent SDK-touching commits to inform the choice", "passed": null, "evidence": "" },
+        { "text": "Explains that the baseline is the upstream commit the port already reflects, and asks the user to confirm rather than guessing silently", "passed": null, "evidence": "" },
+        { "text": "Describes writing the chosen SHA into .upstream-sync.json before computing drift", "passed": null, "evidence": "" }
+      ]
+    }
+  ]
+}

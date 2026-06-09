@@ -1,0 +1,8 @@
+{
+  "agen2026-06-08T16:06:29-07:00": {
+    "lead": { "persistent_name": "Ripley", "universe": "Alien", "created_at": "2026-06-08T16:06:29-07:00", "legacy_named": false, "status": "active" },
+    "systems-dev": { "persistent_name": "Parker", "universe": "Alien", "created_at": "2026-06-08T16:06:29-07:00", "legacy_named": false, "status": "active" },
+    "core-dev": { "persistent_name": "Brett", "universe": "Alien", "created_at": "2026-06-08T16:06:29-07:00", "legacy_named": false, "status": "active" },
+    "tester": { "persistent_name": "Ash", "universe": "Alien", "created_at": "2026-06-08T16:06:29-07:00", "legacy_named": false, "status": "active" }
+  }
+}

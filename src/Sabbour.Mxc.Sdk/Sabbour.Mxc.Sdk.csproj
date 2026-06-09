@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <PackageId>Sabbour.Mxc.Sdk</PackageId>
+    <RootNamespace>Sabbour.Mxc.Sdk</RootNamespace>
+    <AssemblyName>Sabbour.Mxc.Sdk</AssemblyName>
+    <Version>0.6.1</Version>
+    <Description>.NET 10 SDK for MXC (Microsoft eXecution Containers) — a faithful port of @microsoft/mxc-sdk.</Description>
+    <Authors>Ahmed Sabbour</Authors>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <!-- TODO: Replace with the actual repository URL once published -->
+    <RepositoryUrl>https://github.com/sabbour/mxc-dotnet-sdk</RepositoryUrl>
+    <PackageProjectUrl>https://github.com/sabbour/mxc-dotnet-sdk</PackageProjectUrl>
+    <PackageTags>mxc;sandbox;containers;isolation;security</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <IsPackable>true</IsPackable>
+    <IncludeSymbols>true</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="NuGet.Versioning" />
+    <PackageReference Include="Porta.Pty" />
+    <InternalsVisibleTo Include="Sabbour.Mxc.Sdk.Tests" />
+    <InternalsVisibleTo Include="Sabbour.Mxc.Sdk.IntegrationTests" />
+    <InternalsVisibleTo Include="DynamicProxyGenAssembly2" />
+  </ItemGroup>
+
+</Project>

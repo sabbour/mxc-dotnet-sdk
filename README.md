@@ -21,13 +21,30 @@ Or add a `PackageReference` to your `.csproj`:
 <PackageReference Include="Sabbour.Mxc.Sdk" Version="0.6.1" />
 ```
 
+## Table of contents
+
+- [Quickstart](#quickstart)
+- [Execution examples](#execution-examples)
+  - [Policy enforcement, side by side](#policy-enforcement-side-by-side)
+- [API guide](#api-guide)
+  - [Policy → ContainerConfig transform](#policy--containerconfig-transform)
+  - [Spawning](#spawning)
+  - [State-aware isolation session lifecycle](#state-aware-isolation-session-lifecycle)
+  - [Platform support probing](#platform-support-probing)
+  - [Error handling](#error-handling)
+  - [Logging and diagnostics](#logging-and-diagnostics)
+- [Version support](#version-support)
+- [No CLI / executor resolution](#no-cli--executor-resolution)
+- [Running the tests](#running-the-tests)
+- [Enabling isolation backends (host setup)](#enabling-isolation-backends-host-setup)
+- [License](#license)
+
 ## Quickstart
 
-Spawn a sandboxed process from a policy:
+Start with a policy and turn it into the backend config that the native executor understands:
 
 ```csharp
 using Sabbour.Mxc.Sdk;
-using Sabbour.Mxc.Sdk.Sandbox;
 
 var policy = new SandboxPolicy
 {
@@ -35,13 +52,334 @@ var policy = new SandboxPolicy
     Network = new NetworkPolicy { AllowOutbound = false },
 };
 
-// Buffered one-shot — waits for exit, returns output (TS spawnSandboxAsync)
-var result = await MxcSdk.SpawnSandboxAsync("echo hello from sandbox", policy);
-Console.WriteLine($"Output: {result.Stdout}");
-Console.WriteLine($"Exit code: {result.ExitCode}");
+ContainerConfig config = MxcSdk.CreateConfigFromPolicy(policy, containment: "process");
+Console.WriteLine(config.Containment);
 ```
 
-## Policy → ContainerConfig Transform
+Spawning a sandboxed process uses the same policy, but it also needs the native MXC executor. See [No CLI / executor resolution](#no-cli--executor-resolution) before running spawn examples.
+
+## Execution examples
+
+The [`examples/`](examples/) folder contains runnable console projects that reference the local SDK source. The table in [`examples/README.md`](examples/README.md) is the canonical scenario list and marks which examples need the native executor.
+
+The commands below were run with `-c Release` from the repository root.
+
+### Policy enforcement, side by side
+
+[`10-policy-enforcement`](examples/10-policy-enforcement) is the demo worth seeing first. One small probe tries two things — fetch a URL over the network and read a secret file that lives *outside* its workspace:
+
+```text
+[network]    curl https://api.github.com/zen
+[filesystem] cat /tmp/mxc-policy-demo/secret.txt
+```
+
+The SDK runs that **same probe twice** through `MxcSdk.SpawnSandboxAsync`, changing nothing but the [`SandboxPolicy`](src/Sabbour.Mxc.Sdk):
+
+- **Permissive** — `Network.AllowOutbound = true`, and the secret's folder is in `Filesystem.ReadwritePaths`.
+- **Restrictive** — `Network.AllowOutbound = false`, and only the workspace is in `ReadwritePaths`, so the secret folder is never exposed.
+
+The output below is captured from a WSL2 (Ubuntu 24.04) run using the Linux `lxc-exec` executor with bubblewrap containment:
+
+```text
+$ dotnet run --project examples/10-policy-enforcement -c Release
+
+secret file: /tmp/mxc-policy-demo/secret.txt (outside the workspace)
+workspace:   /tmp/mxc-policy-demo/workspace
+
+=== WITHOUT restrictions  (allowOutbound=true, secret folder readable) ===
+[network]    curl https://api.github.com/zen
+Anything added dilutes everything else.
+[filesystem] cat /tmp/mxc-policy-demo/secret.txt
+API_KEY=do-not-leak
+
+=== WITH policy           (allowOutbound=false, only workspace readable) ===
+[network]    curl https://api.github.com/zen
+curl: (6) Could not resolve host: api.github.com
+[filesystem] cat /tmp/mxc-policy-demo/secret.txt
+cat: /tmp/mxc-policy-demo/secret.txt: No such file or directory
+```
+
+Without the policy, the probe reaches GitHub (the quote is live, so it changes per run) and prints the secret. With the policy, both attempts fail at the kernel boundary: outbound traffic is gone because the sandbox runs in its own network namespace, and the secret is reported missing because the file was never mounted into the sandbox — denial by absence, not by an error code. The probe binary is unchanged between the two runs; only the policy differs.
+
+This example needs the native MXC executor (see [Running the tests](#running-the-tests) for setup). On Windows hosts it adapts the probe to `cmd`/`type`; backend availability is covered in [Enabling isolation backends](#enabling-isolation-backends-host-setup).
+
+The remaining examples each focus on a single scenario.
+
+### `01-policy-to-config` — policy to backend config
+
+```powershell
+dotnet run --project examples\01-policy-to-config -c Release
+```
+
+```text
+Policy -> backend ContainerConfig transform. This example needs no native binary.
+{
+  "version": "0.6.0-alpha",
+  "containerId": "5ce1e9ed",
+  "lifecycle": {
+    "destroyOnExit": true,
+    "preservePolicy": false
+  },
+  "process": {
+    "commandLine": "",
+    "timeout": 0
+  },
+  "filesystem": {
+    "readwritePaths": [
+      "C:\\Users\\asabbour\\Git\\mxc-dotnet-sdk"
+    ],
+    "readonlyPaths": [],
+    "deniedPaths": []
+  },
+  "ui": {
+    "disable": true,
+    "clipboard": "none",
+    "injection": false
+  },
+  "network": {
+    "defaultPolicy": "allow",
+    "enforcementMode": "capabilities"
+  },
+  "containment": "process",
+  "processContainer": {
+    "name": "5ce1e9ed",
+    "leastPrivilege": false,
+    "capabilities": [
+      "internetClient"
+    ],
+    "ui": {
+      "isolation": "container",
+      "desktopSystemControl": false,
+      "systemSettings": "none",
+      "ime": false
+    }
+  }
+}
+```
+
+### `02-platform-support` — platform probe
+
+```powershell
+dotnet run --project examples\02-platform-support -c Release
+```
+
+```text
+Platform support probe. This detects sandbox backends on the current host.
+IsSupported: True
+AvailableMethods: ProcessContainer
+IsolationTier:
+```
+
+### `03-buffered-spawn` — buffered stdout/stderr
+
+```powershell
+dotnet run --project examples\03-buffered-spawn -c Release
+```
+
+This scenario needs the native MXC executor. Set `MXC_BIN_DIR` or `SandboxSpawnOptions.ExecutablePath` first; see [Running the tests](#running-the-tests) for executor setup.
+
+### `04-network-policy` — host-filtering validation
+
+```powershell
+dotnet run --project examples\04-network-policy -c Release
+```
+
+```text
+Valid policy succeeded: allowOutbound=true with allowedHosts=[api.contoso.com].
+Caught expected validation error: allowedHosts/blockedHosts require allowOutbound to be true
+Host filtering requires allowOutbound=true unless the selected backend can enforce per-host rules itself.
+```
+
+### `05-state-aware-lifecycle` — provision/start/exec/stop/deprovision
+
+```powershell
+dotnet run --project examples\05-state-aware-lifecycle -c Release
+```
+
+This scenario needs the native MXC executor. Set `MXC_BIN_DIR` or `SandboxSpawnOptions.ExecutablePath` first; see [Running the tests](#running-the-tests) for executor setup.
+
+### `06-hello-world` — sandboxed command with a named container
+
+```powershell
+dotnet run --project examples\06-hello-world -c Release
+```
+
+With no executor installed, the example exits cleanly and prints the setup guidance:
+
+```text
+The native executor could not run this scenario: wxc-exec.exe not found. Set ExecutablePath or ensure it exists in a standard location.
+This scenario needs the MXC executor.
+Download mxc-release-binaries.zip from https://github.com/microsoft/mxc/releases (v0.6.1), unzip it, and set MXC_BIN_DIR to the folder containing <arch>\wxc-exec.exe.
+Then run this example again.
+```
+
+### `07-filesystem-access` — read/write, read-only, and denied paths
+
+```powershell
+dotnet run --project examples\07-filesystem-access -c Release
+```
+
+```text
+Filesystem access control policy -> backend ContainerConfig. This example needs no native binary.
+readwritePaths grant read+write, readonlyPaths grant read, deniedPaths block all access, and clearPolicyOnExit resets the policy when the shell exits.
+{
+  "version": "0.6.0-alpha",
+  "containerId": "1f10e57f",
+  "lifecycle": {
+    "destroyOnExit": true,
+    "preservePolicy": false
+  },
+  "process": {
+    "commandLine": "",
+    "timeout": 0
+  },
+  "filesystem": {
+    "readwritePaths": [
+      "C:\\temp\\workspace"
+    ],
+    "readonlyPaths": [
+      "C:\\ProgramData\\shared-config"
+    ],
+    "deniedPaths": [
+      "C:\\Windows\\System32"
+    ]
+  },
+  "ui": {
+    "disable": true,
+    "clipboard": "none",
+    "injection": false
+  },
+  "network": {
+    "defaultPolicy": "block",
+    "enforcementMode": "capabilities"
+  },
+  "containment": "process",
+  "processContainer": {
+    "name": "1f10e57f",
+    "leastPrivilege": false,
+    "capabilities": [],
+    "ui": {
+      "isolation": "container",
+      "desktopSystemControl": false,
+      "systemSettings": "none",
+      "ime": false
+    }
+  }
+}
+```
+
+### `08-network-restricted` — outbound allow-list
+
+```powershell
+dotnet run --project examples\08-network-restricted -c Release
+```
+
+This scenario needs the native MXC executor. Set `MXC_BIN_DIR` or `SandboxSpawnOptions.ExecutablePath` first; see [Running the tests](#running-the-tests) for executor setup.
+
+### `09-network-proxy` — localhost and built-in proxy config
+
+```powershell
+dotnet run --project examples\09-network-proxy -c Release
+```
+
+```text
+Network proxy policy -> backend ContainerConfig. This example needs no native binary.
+ProxyConfig is a discriminated union: choose exactly one of localhost, builtinTestServer, or url.
+
+1) Route traffic through an external proxy on localhost:8080.
+{
+  "version": "0.6.0-alpha",
+  "containerId": "da7fde8e",
+  "lifecycle": {
+    "destroyOnExit": true,
+    "preservePolicy": false
+  },
+  "process": {
+    "commandLine": "",
+    "timeout": 0
+  },
+  "filesystem": {
+    "readwritePaths": [],
+    "readonlyPaths": [],
+    "deniedPaths": []
+  },
+  "ui": {
+    "disable": true,
+    "clipboard": "none",
+    "injection": false
+  },
+  "network": {
+    "defaultPolicy": "allow",
+    "proxy": {
+      "localhost": 8080
+    },
+    "enforcementMode": "capabilities"
+  },
+  "containment": "process",
+  "processContainer": {
+    "name": "da7fde8e",
+    "leastPrivilege": false,
+    "capabilities": [
+      "internetClient"
+    ],
+    "ui": {
+      "isolation": "container",
+      "desktopSystemControl": false,
+      "systemSettings": "none",
+      "ime": false
+    }
+  }
+}
+
+2) Route traffic through the built-in test proxy server.
+{
+  "version": "0.6.0-alpha",
+  "containerId": "4d8bb604",
+  "lifecycle": {
+    "destroyOnExit": true,
+    "preservePolicy": false
+  },
+  "process": {
+    "commandLine": "",
+    "timeout": 0
+  },
+  "filesystem": {
+    "readwritePaths": [],
+    "readonlyPaths": [],
+    "deniedPaths": []
+  },
+  "ui": {
+    "disable": true,
+    "clipboard": "none",
+    "injection": false
+  },
+  "network": {
+    "defaultPolicy": "allow",
+    "proxy": {
+      "builtinTestServer": true
+    },
+    "enforcementMode": "capabilities"
+  },
+  "containment": "process",
+  "processContainer": {
+    "name": "4d8bb604",
+    "leastPrivilege": false,
+    "capabilities": [
+      "internetClient"
+    ],
+    "ui": {
+      "isolation": "container",
+      "desktopSystemControl": false,
+      "systemSettings": "none",
+      "ime": false
+    }
+  }
+}
+```
+
+## API guide
+
+### Policy → ContainerConfig transform
 
 Convert a security-intent policy into a backend-specific container configuration:
 
@@ -54,9 +392,9 @@ config = config with
 };
 ```
 
-## Spawning
+### Spawning
 
-### Live PTY (interactive)
+#### Live PTY (interactive)
 
 ```csharp
 // Live PTY spawn (TS spawnSandbox) — async due to Porta.Pty
@@ -71,7 +409,7 @@ pty.Write("print('hello')\n");
 var exit = await pty.WaitForExitAsync();
 ```
 
-### Buffered one-shot (TS spawnSandboxAsync)
+#### Buffered one-shot (TS spawnSandboxAsync)
 
 ```csharp
 var result = await MxcSdk.SpawnSandboxAsync(
@@ -80,7 +418,7 @@ var result = await MxcSdk.SpawnSandboxAsync(
 // result.Stdout, result.Stderr, result.ExitCode
 ```
 
-### Pipe mode
+#### Pipe mode
 
 When PTY overhead is unnecessary (CI, batch jobs), use pipe mode for separate stdout/stderr:
 
@@ -91,7 +429,7 @@ int exitCode = await conn.WaitForExitAsync();
 Console.WriteLine(conn.GetStdout());
 ```
 
-## State-Aware Isolation Session Lifecycle
+### State-aware isolation session lifecycle
 
 The state-aware API manages sandbox lifecycle phases: provision → start → exec → stop → deprovision.
 
@@ -113,12 +451,18 @@ await MxcSdk.StartSandboxAsync(sandboxId);
 
 // 3. Exec (streaming PTY — sync call, no await)
 using var pty = MxcSdk.ExecInSandbox(sandboxId,
-    new IsolationSessionExecConfig { CommandLine = "dir" });
+    new IsolationSessionExecConfig
+    {
+        Process = new ProcessConfig { CommandLine = "dir" }
+    });
 var exit = await pty.WaitForExitAsync();
 
 // 3b. Exec (buffered — async)
 var execResult = await MxcSdk.ExecInSandboxAsync(sandboxId,
-    new IsolationSessionExecConfig { CommandLine = "echo done" });
+    new IsolationSessionExecConfig
+    {
+        Process = new ProcessConfig { CommandLine = "echo done" }
+    });
 
 // 4. Stop
 await MxcSdk.StopSandboxAsync(sandboxId);
@@ -127,7 +471,7 @@ await MxcSdk.StopSandboxAsync(sandboxId);
 await MxcSdk.DeprovisionSandboxAsync(sandboxId);
 ```
 
-## Platform Support Probing
+### Platform support probing
 
 Detect available containment backends on the current host:
 
@@ -140,7 +484,7 @@ if (support.IsSupported)
 }
 ```
 
-## Error Handling
+### Error handling
 
 The SDK throws `MxcException` when the native executor reports structured errors:
 
@@ -161,24 +505,37 @@ catch (MxcException ex)
 
 Error codes are defined in the `ErrorCode` enum (e.g., `MalformedRequest`, `BackendUnavailable`, `StaleId`).
 
-## Logging & Diagnostics
+### Logging and diagnostics
 
-Inject a logger via `IMxcLogger` for structured diagnostic output. The SDK automatically redacts sensitive tokens (e.g., `wamToken`) before they reach log sinks.
+The diagnostics layer exposes `IMxcLogger` and `FileLogger` for custom sinks. Spawn diagnostics are enabled through `SandboxSpawnOptions.Debug`; set `LogDir` when you want deterministic log placement. Sensitive tokens such as `wamToken` are redacted before they reach log files.
 
 ```csharp
-using Sabbour.Mxc.Sdk.Diagnostics;
-// IMxcLogger can be implemented for custom sinks
+using Sabbour.Mxc.Sdk.Sandbox;
+
+var options = new SandboxSpawnOptions
+{
+    Debug = true,
+    LogDir = @"C:\mxc-logs"
+};
 ```
 
-## Version Support
+## Version support
 
 This SDK validates the policy `version` field. The example pins `0.6.0-alpha`, the schema shipped by the latest stable executor release (`v0.6.1`) — match it to the binary you install. The SDK accepts versions from `0.4.0-alpha` (minimum) up to `0.7.0-alpha` (the newest schema it understands); when you omit `version`, it fills in `0.7.0-alpha`. Policies outside that range are rejected at config-creation time.
 
 For the canonical field reference — `version`, `filesystem`, `network`, `ui`, and `timeoutMs` — see the upstream [MXC Sandbox Policy Spec §5 (SandboxPolicy)](https://github.com/microsoft/mxc/blob/v0.6.1/docs/sandbox-policy/v1/policy.md#5-sandboxpolicy), pinned to the `v0.6.1` release.
 
-## No CLI
+## No CLI / executor resolution
 
-This SDK shells out to the native `wxc-exec` binary for sandbox operations. It has no CLI of its own — it is a library, not a tool. Set `MXC_BIN_DIR` to the directory that contains `<arch>\wxc-exec.exe` (for example, `x64\wxc-exec.exe`), or specify `SandboxSpawnOptions.ExecutablePath` per spawn. The SDK does not search PATH.
+This package is a library, not a command-line tool. Sandbox execution shells out to the native MXC executor (`wxc-exec.exe` on Windows, `lxc-exec` on Linux, and `mxc-exec-mac` for macOS seatbelt).
+
+Use one of these resolution paths:
+
+1. Set `SandboxSpawnOptions.ExecutablePath` for a single spawn.
+2. Set `MXC_BIN_DIR` to the root directory that contains `<arch>\wxc-exec.exe` on Windows, or `<arch>/lxc-exec` on Linux (`<arch>` is `x64` or `arm64`).
+3. Package/publish layouts can include `bin\<arch>\...` next to the SDK assembly or app base directory.
+4. Development builds can be found under repo Cargo target paths.
+5. On Windows, `PATH` is a last fallback. Prefer `ExecutablePath` or `MXC_BIN_DIR` for predictable behavior.
 
 ## Running the tests
 
@@ -194,15 +551,15 @@ Unit tests do not need the native executor and run on any OS supported by .NET 1
 
 Download the prebuilt executor from [microsoft/mxc releases](https://github.com/microsoft/mxc/releases). The latest release is `v0.6.1`, with the `mxc-release-binaries.zip` asset.
 
-Unzip the archive, then set `MXC_BIN_DIR` to the folder that contains `<arch>\wxc-exec.exe`:
+Unzip the archive, then set `MXC_BIN_DIR` to the folder that contains the architecture-specific executor directory (`x64` or `arm64`):
 
 ```powershell
-$env:MXC_BIN_DIR = "C:\path\to\mxc-bin"
+$env:MXC_BIN_DIR = "C:\mxc-bin"
 $env:MXC_INTEGRATION_TESTS = "1"
 dotnet test
 ```
 
-The SDK looks for `$env:MXC_BIN_DIR\<arch>\wxc-exec.exe`; it does not search PATH. On Windows, the default `processcontainer` backend needs Windows 11 24H2 or later (build 26100+) and does not require admin.
+For test runs, prefer `$env:MXC_BIN_DIR\x64\wxc-exec.exe` or `$env:MXC_BIN_DIR\arm64\wxc-exec.exe` so the executor path is deterministic. On Windows, the default `processcontainer` backend needs Windows 11 24H2 or later (build 26100+) and does not require admin.
 
 ## Enabling isolation backends (host setup)
 
@@ -215,8 +572,8 @@ The default `processcontainer` path works out of the box on recent Windows build
 Check which tier the executor will select on the current host (read-only, no admin):
 
 ```powershell
-& "$env:MXC_BIN_DIR\<arch>\wxc-exec.exe" --probe
-# { "tier": "base-container", "needsDaclAugmentation": false, "probes": { ... } }
+$arch = "x64" # use "arm64" on ARM64 hosts
+& "$env:MXC_BIN_DIR\$arch\wxc-exec.exe" --probe
 ```
 
 #### processcontainer
@@ -228,16 +585,19 @@ Check which tier the executor will select on the current host (read-only, no adm
   ```powershell
   # Run elevated. Use comma-separated IDs — repeated /id: flags are rejected.
   .\ViVeTool.exe /enable /id:61389575,61155944
-  .\ViVeTool.exe /query /id:61389575   # State : Enabled (2)
+  .\ViVeTool.exe /query /id:61389575
   ```
+
+  The query command should report the feature as enabled before you retry the executor.
 
   Older policy schemas (`0.4.0-alpha`) take the ungated AppContainer path instead, so they run without this gate.
 
 - **`appcontainer-dacl`** needs a one-time host preparation that grants the AppContainer SIDs the ACEs they require. Run `wxc-host-prep` elevated (it exits non-zero if not):
 
   ```powershell
-  & "$env:MXC_BIN_DIR\<arch>\wxc-host-prep.exe" prepare-system-drive   # one-time, persists
-  & "$env:MXC_BIN_DIR\<arch>\wxc-host-prep.exe" prepare-null-device    # per-boot
+  $arch = "x64" # use "arm64" on ARM64 hosts
+  & "$env:MXC_BIN_DIR\$arch\wxc-host-prep.exe" prepare-system-drive   # one-time, persists
+  & "$env:MXC_BIN_DIR\$arch\wxc-host-prep.exe" prepare-null-device    # per-boot
   ```
 
 #### windows_sandbox
@@ -286,7 +646,7 @@ On WSL2 / Linux the SDK uses the Linux executor (`lxc-exec`). Two things light i
 
    ```bash
    mkdir -p "$HOME/mxc-bin/arm64"
-   cp /path/to/lxc-exec "$HOME/mxc-bin/arm64/lxc-exec"
+   cp ./lxc-exec "$HOME/mxc-bin/arm64/lxc-exec"
    chmod +x "$HOME/mxc-bin/arm64/lxc-exec"
    export MXC_BIN_DIR="$HOME/mxc-bin"
    ```

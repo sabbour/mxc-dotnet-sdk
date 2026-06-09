@@ -27,6 +27,9 @@
   <Folder Name="/examples/09-network-proxy/">
     <Project Path="examples/09-network-proxy/NetworkProxy.csproj" />
   </Folder>
+  <Folder Name="/examples/10-policy-enforcement/">
+    <Project Path="examples/10-policy-enforcement/PolicyEnforcement.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Sabbour.Mxc.Sdk/Sabbour.Mxc.Sdk.csproj" />
   </Folder>

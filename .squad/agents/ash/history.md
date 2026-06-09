@@ -16,3 +16,8 @@
 ## 2026-06-08T22:26:04-07:00 — Parity scaffold and test assessment recorded
 
 Scribe recorded Ash's parity scaffold under `tests\Sabbour.Mxc.Sdk.Tests\Parity\` with namespace `Sabbour.Mxc.Sdk.Tests.Parity`, including `ParityTestHelpers.cs` and `ParityScaffoldSmokeTests.cs`. Also recorded Ash's follow-up `test-redundancy-assessment.md` and `parity-red-flags.md` recommendation outputs. Existing 371 tests stayed green during scaffold validation.
+
+
+## 2026-06-09T14:53:00-07:00 — Proxy-containment parity and hermetic arg-building tests
+
+Ash fixed Linux proxy-containment parity by centralizing proxy rejection in `PolicyTransform.ValidateProxyContainmentSupport` and invoking it from both `PolicyTransform.BuildNetworkConfig` and `SandboxFactory.ApplyNetworkConfig`. For arg-building-only unit tests that should not depend on host backend availability, use `SkipPlatformCheck=true` to keep tests hermetic while preserving assertions.

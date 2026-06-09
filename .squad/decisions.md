@@ -265,3 +265,10 @@ Archived because this entry is older than 30 days and the merged decisions file 
 - `processcontainer` with `0.6.0-alpha` failed `E_NOTIMPL` with velocity keys `61389575` / `61155944` disabled.
 - `wslc` and `microvm` invoked the executor but returned exit `-1` because the host stack was absent; `microvm` correctly rejected a network policy.
 - `windows_sandbox` and `hyperlight` are `NotSupportedException` in the port; `isolation_session` is `BackendUnavailable` because the COM class is not registered.
+
+
+### 2026-06-09T21-43-25: Wire proxy-containment rejection into SandboxFactory.ApplyNetworkConfig via a shared PolicyTransform validator (parity fix, user-approved)
+**By:** Squad-Coordinator
+**What:** Wire proxy-containment rejection into SandboxFactory.ApplyNetworkConfig via a shared PolicyTransform validator (parity fix, user-approved)
+**References:** Ash, SandboxFactory.cs:174-202, PolicyTransform.cs:141-157, SandboxParityTests.cs:249-262,627-638, decision #4
+**Why:** Restoring ubuntu-latest CI exposed two intentional RED-FLAG Linux parity tests (SandboxParityTests.CreateConfigFromPolicy_Linux_RejectsProxyForExplicitLxcContainment, BuildSandboxPayload_Linux_RejectsProxyForNonBubblewrapContainments). Root cause: PolicyTransform.BuildNetworkConfig throws for proxy + non-bubblewrap Linux containment, but SandboxFactory.ApplyNetworkConfig (the path these tests use) never replicated that check. User approved fixing the SDK rather than weakening/skipping the tests. Fix mirrors the already-approved host-filtering parity fix: extract proxy-rejection into a single shared PolicyTransform validator, call it from both BuildNetworkConfig and SandboxFactory.ApplyNetworkConfig. Owner: Ash.

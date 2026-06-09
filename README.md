@@ -195,7 +195,11 @@ The SDK looks for `$env:MXC_BIN_DIR\<arch>\wxc-exec.exe`; it does not search PAT
 
 ## Enabling isolation backends (host setup)
 
-The SDK picks a containment backend, but the host has to have that backend lit up first. The default `processcontainer` path works out of the box on recent Windows builds; the other backends need one-time setup. The steps below are the ones that get each backend running with the `v0.6.1` executor binaries.
+The SDK picks a containment backend, but the host has to have that backend lit up first. Which backends are available depends on the host OS — Windows and WSL/Linux are covered separately below.
+
+### Windows host
+
+The default `processcontainer` path works out of the box on recent Windows builds; the other backends need one-time setup. The steps below are the ones that get each backend running with the `v0.6.1` executor binaries.
 
 Check which tier the executor will select on the current host (read-only, no admin):
 
@@ -204,7 +208,7 @@ Check which tier the executor will select on the current host (read-only, no adm
 # { "tier": "base-container", "needsDaclAugmentation": false, "probes": { ... } }
 ```
 
-### processcontainer
+#### processcontainer
 
 `processcontainer` has three tiers (highest first): `base-container`, `appcontainer-bfs`, `appcontainer-dacl`. The probe reports which one applies.
 
@@ -225,7 +229,7 @@ Check which tier the executor will select on the current host (read-only, no adm
   & "$env:MXC_BIN_DIR\<arch>\wxc-host-prep.exe" prepare-null-device    # per-boot
   ```
 
-### windows_sandbox
+#### windows_sandbox
 
 A real disposable-VM backend (host daemon + in-VM guest). Enable the Windows Sandbox feature elevated, then **reboot**:
 
@@ -243,15 +247,15 @@ using var conn = MxcSdk.SpawnSandboxProcessFromConfig(config,
     new SandboxSpawnOptions { Experimental = true, UsePty = false });
 ```
 
-### microvm (NanVix)
+#### microvm (NanVix)
 
 Requires the `nanvixd.exe` daemon, which is **not included** in the public `mxc-release-binaries.zip`, so it cannot run from the released binaries. This backend also rejects any policy that sets `network` (no network-policy enforcement).
 
-### wslc
+#### wslc
 
 `wslc` runs Linux OCI containers in a dedicated WSL-managed Hyper-V VM. It is still under development and requires WSL 2.8.1 or newer.
 
-### hyperlight
+#### hyperlight
 
 `hyperlight` runs workloads as x86_64 guest code inside a hardware micro-VM (WHP on Windows, KVM on Linux). It requires an **x86_64 host** — the snapshot tooling has no arm64 guest, so on an arm64 machine `--setup-hyperlight` exits with `requires x86_64 (Hyperlight needs KVM or WHP)`.
 
@@ -263,11 +267,11 @@ On an x86_64 host, warm the published snapshot once before first use (pulls the 
 
 Like `windows_sandbox`, `hyperlight` is reached through a prebuilt config with `Experimental = true`, not through `CreateConfigFromPolicy`.
 
-### Running in WSL (Linux executor)
+### WSL / Linux host
 
-The SDK runs inside WSL2 against the Linux executor (`lxc-exec`). This was verified on Ubuntu-24.04 (arm64) under WSL2. Setup:
+The SDK also runs inside WSL2 against the Linux executor (`lxc-exec`). This was verified on Ubuntu-24.04 (arm64) under WSL2 — example 06 prints `Hello from MXC!` with exit code 0 using the default `process` containment. Setup:
 
-1. **Install the .NET 10 SDK in WSL.** The system package on Ubuntu-24.04 is .NET 8, which is too old to build the `net10.0` targets. Install 10.0 alongside it and point your shell at it:
+1. **Install the .NET 10 SDK.** Build/run with .NET 10; if you keep it out of the system path, point your shell at it:
 
    ```bash
    curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --quality ga --install-dir "$HOME/dotnet10"
@@ -295,6 +299,8 @@ The SDK runs inside WSL2 against the Linux executor (`lxc-exec`). This was verif
    ```bash
    cd examples/06-hello-world
    dotnet run -c Release
+   # Stdout: Hello from MXC!
+   # ExitCode: 0
    ```
 
 The `process`, `lxc`, and `bubblewrap` containments target this Linux executor. The Windows-only backends (`windows_sandbox`, `microvm`, `hyperlight`) are not reachable from WSL — `microvm`/`hyperlight` need an x86_64 host with KVM, which is not exposed inside this WSL2 VM.

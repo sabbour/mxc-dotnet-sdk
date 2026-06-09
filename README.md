@@ -253,10 +253,12 @@ Requires the `nanvixd.exe` daemon, which is **not included** in the public `mxc-
 
 ### hyperlight
 
-Warm the published snapshot once before first use (pulls the kernel + initrd via docker/podman):
+`hyperlight` runs workloads as x86_64 guest code inside a hardware micro-VM (WHP on Windows, KVM on Linux). It requires an **x86_64 host** — the snapshot tooling has no arm64 guest, so on an arm64 machine `--setup-hyperlight` exits with `requires x86_64 (Hyperlight needs KVM or WHP)`.
+
+On an x86_64 host, warm the published snapshot once before first use (pulls the kernel + initrd via docker/podman):
 
 ```powershell
-& "$env:MXC_BIN_DIR\<arch>\wxc-exec.exe" --setup-hyperlight
+& "$env:MXC_BIN_DIR\x64\wxc-exec.exe" --setup-hyperlight
 ```
 
 Like `windows_sandbox`, `hyperlight` is reached through a prebuilt config with `Experimental = true`, not through `CreateConfigFromPolicy`.

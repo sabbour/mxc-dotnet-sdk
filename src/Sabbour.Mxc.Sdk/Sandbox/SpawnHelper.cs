@@ -176,27 +176,43 @@ internal static class SpawnHelper
             return options.ExecutablePath;
         }
 
-        // SECURITY (#10 trust boundary): FindWxcExecutable searches packaged/assembly-relative
+        // Platform-specific binary resolution — matches TS resolveBinaryAndCommonArgs (helper.ts:157-172):
+        // linux -> lxc-exec, darwin -> mxc-exec-mac, win32 -> wxc-exec.exe.
+        // SECURITY (#10 trust boundary): each finder searches packaged/assembly-relative
         // paths BEFORE PATH, ensuring a local attacker cannot shadow the binary via PATH injection.
         // See Platform/DefaultPlatformProbeRunner.cs for the search order.
-        var path = DefaultPlatformProbeRunner.FindWxcExecutable();
-        if (path is null)
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+            var path = DefaultPlatformProbeRunner.FindLxcExecutable();
+            if (path is null)
             {
                 throw new InvalidOperationException(
                     "lxc-exec not found. Ensure it is built and available in a standard location.");
             }
-            if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+            return path;
+        }
+
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        {
+            var path = DefaultPlatformProbeRunner.FindSeatbeltExecutable();
+            if (path is null)
             {
                 throw new InvalidOperationException(
                     "mxc-exec-mac not found. Ensure it is built and available in a standard location.");
             }
-            throw new InvalidOperationException(
-                "wxc-exec.exe not found. Set ExecutablePath or ensure it exists in a standard location.");
+            return path;
         }
 
-        return path;
+        // Windows (default)
+        {
+            var path = DefaultPlatformProbeRunner.FindWxcExecutable();
+            if (path is null)
+            {
+                throw new InvalidOperationException(
+                    "wxc-exec.exe not found. Set ExecutablePath or ensure it exists in a standard location.");
+            }
+            return path;
+        }
     }
 
     /// <summary>

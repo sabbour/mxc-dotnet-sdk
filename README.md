@@ -269,17 +269,9 @@ Like `windows_sandbox`, `hyperlight` is reached through a prebuilt config with `
 
 ### WSL / Linux host
 
-The SDK also runs inside WSL2 against the Linux executor (`lxc-exec`). This was verified on Ubuntu-24.04 (arm64) under WSL2 — example 06 prints `Hello from MXC!` with exit code 0 using the default `process` containment. Setup:
+On WSL2 / Linux the SDK uses the Linux executor (`lxc-exec`). Two things light it up — verified on Ubuntu-24.04 (arm64) under WSL2, where the default `process` containment runs cleanly:
 
-1. **Install the .NET 10 SDK.** Build/run with .NET 10; if you keep it out of the system path, point your shell at it:
-
-   ```bash
-   curl -sSL https://dot.net/v1/dotnet-install.sh | bash -s -- --channel 10.0 --quality ga --install-dir "$HOME/dotnet10"
-   export DOTNET_ROOT="$HOME/dotnet10"
-   export PATH="$HOME/dotnet10:$PATH"
-   ```
-
-2. **Place the Linux executor where the SDK looks for it.** The released `mxc-release-binaries.zip` ships the Windows `wxc-exec.exe`; on Linux the SDK resolves `lxc-exec` from `MXC_BIN_DIR/<arch>/` (`<arch>` is `arm64` or `x64`). Copy the Linux `lxc-exec` build there and mark it executable:
+1. **Place the Linux executor where the SDK looks for it.** The released `mxc-release-binaries.zip` ships the Windows `wxc-exec.exe`; on Linux the SDK resolves `lxc-exec` from `MXC_BIN_DIR/<arch>/` (`<arch>` is `arm64` or `x64`). Copy the Linux `lxc-exec` build there and mark it executable:
 
    ```bash
    mkdir -p "$HOME/mxc-bin/arm64"
@@ -288,19 +280,10 @@ The SDK also runs inside WSL2 against the Linux executor (`lxc-exec`). This was 
    export MXC_BIN_DIR="$HOME/mxc-bin"
    ```
 
-3. **Install bubblewrap.** The default `process` containment runs the workload under `bwrap`. Without it the executor exits with `Bubblewrap (bwrap) is not installed or not on PATH`:
+2. **Install bubblewrap.** The default `process` containment runs the workload under `bwrap`. Without it the executor exits with `Bubblewrap (bwrap) is not installed or not on PATH`:
 
    ```bash
    sudo apt-get install -y bubblewrap
-   ```
-
-4. **Run an example:**
-
-   ```bash
-   cd examples/06-hello-world
-   dotnet run -c Release
-   # Stdout: Hello from MXC!
-   # ExitCode: 0
    ```
 
 The `process`, `lxc`, and `bubblewrap` containments target this Linux executor. The Windows-only backends (`windows_sandbox`, `microvm`, `hyperlight`) are not reachable from WSL — `microvm`/`hyperlight` need an x86_64 host with KVM, which is not exposed inside this WSL2 VM.

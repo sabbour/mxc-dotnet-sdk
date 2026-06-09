@@ -193,6 +193,78 @@ dotnet test
 
 The SDK looks for `$env:MXC_BIN_DIR\<arch>\wxc-exec.exe`; it does not search PATH. On Windows, the default `processcontainer` backend needs Windows 11 24H2 or later (build 26100+) and does not require admin.
 
+## Enabling isolation backends (host setup)
+
+The SDK picks a containment backend, but the host has to have that backend lit up first. The default `processcontainer` path works out of the box on recent Windows builds; the other backends need one-time setup. The steps below are the ones that get each backend running with the `v0.6.1` executor binaries.
+
+Check which tier the executor will select on the current host (read-only, no admin):
+
+```powershell
+& "$env:MXC_BIN_DIR\<arch>\wxc-exec.exe" --probe
+# { "tier": "base-container", "needsDaclAugmentation": false, "probes": { ... } }
+```
+
+### processcontainer
+
+`processcontainer` has three tiers (highest first): `base-container`, `appcontainer-bfs`, `appcontainer-dacl`. The probe reports which one applies.
+
+- **`base-container`** uses an experimental kernel API that ships behind a Windows velocity (controlled-feature-rollout) gate on current builds. When the gate is closed, the executor returns `E_NOTIMPL` even though the API is present. Light it up with [ViVeTool](https://github.com/thebookisclosed/ViVe) (download the build that matches your CPU arch), then **reboot**:
+
+  ```powershell
+  # Run elevated. Use comma-separated IDs — repeated /id: flags are rejected.
+  .\ViVeTool.exe /enable /id:61389575,61155944
+  .\ViVeTool.exe /query /id:61389575   # State : Enabled (2)
+  ```
+
+  Older policy schemas (`0.4.0-alpha`) take the ungated AppContainer path instead, so they run without this gate.
+
+- **`appcontainer-dacl`** needs a one-time host preparation that grants the AppContainer SIDs the ACEs they require. Run `wxc-host-prep` elevated (it exits non-zero if not):
+
+  ```powershell
+  & "$env:MXC_BIN_DIR\<arch>\wxc-host-prep.exe" prepare-system-drive   # one-time, persists
+  & "$env:MXC_BIN_DIR\<arch>\wxc-host-prep.exe" prepare-null-device    # per-boot
+  ```
+
+### windows_sandbox
+
+A real disposable-VM backend (host daemon + in-VM guest). Enable the Windows Sandbox feature elevated, then **reboot**:
+
+```powershell
+Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
+```
+
+It also needs hardware virtualization enabled in firmware and Python on the host. On Windows builds 26100 and newer there is a documented boot regression (zombie VM processes) that can keep the sandbox VM from starting even when the feature is enabled.
+
+This backend is not selectable through `CreateConfigFromPolicy` (matching upstream — its `createConfigFromPolicy` has no branch for it either). Reach it with a prebuilt config plus the experimental flag:
+
+```csharp
+var config = MxcSdk.BuildSandboxPayload("echo hi", policy, containment: "windows_sandbox");
+using var conn = MxcSdk.SpawnSandboxProcessFromConfig(config,
+    new SandboxSpawnOptions { Experimental = true, UsePty = false });
+```
+
+### microvm (NanVix)
+
+Requires the `nanvixd.exe` daemon, which is **not included** in the public `mxc-release-binaries.zip`, so it cannot run from the released binaries. This backend also rejects any policy that sets `network` (no network-policy enforcement).
+
+### wslc
+
+Needs more than a working WSL2 distro — the WSLC (WSL Containers) runtime, reported by the executor as the `WslPackage` component, must be installed. Without it the backend fails its preflight (`WSLC runtime not available. Missing components: WslPackage`). MXC does not pull images at run time; pre-pull the image into the cache first:
+
+```powershell
+& "$env:MXC_BIN_DIR\<arch>\wxc-exec.exe" --setup-wslc --image alpine:latest
+```
+
+### hyperlight
+
+Warm the published snapshot once before first use (pulls the kernel + initrd via docker/podman):
+
+```powershell
+& "$env:MXC_BIN_DIR\<arch>\wxc-exec.exe" --setup-hyperlight
+```
+
+Like `windows_sandbox`, `hyperlight` is reached through a prebuilt config with `Experimental = true`, not through `CreateConfigFromPolicy`.
+
 ## License
 
 MIT

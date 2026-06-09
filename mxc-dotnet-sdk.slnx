@@ -15,6 +15,18 @@
   <Folder Name="/examples/05-state-aware-lifecycle/">
     <Project Path="examples/05-state-aware-lifecycle/StateAwareLifecycle.csproj" />
   </Folder>
+  <Folder Name="/examples/06-hello-world/">
+    <Project Path="examples/06-hello-world/HelloWorld.csproj" />
+  </Folder>
+  <Folder Name="/examples/07-filesystem-access/">
+    <Project Path="examples/07-filesystem-access/FilesystemAccess.csproj" />
+  </Folder>
+  <Folder Name="/examples/08-network-restricted/">
+    <Project Path="examples/08-network-restricted/NetworkRestricted.csproj" />
+  </Folder>
+  <Folder Name="/examples/09-network-proxy/">
+    <Project Path="examples/09-network-proxy/NetworkProxy.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Sabbour.Mxc.Sdk/Sabbour.Mxc.Sdk.csproj" />
   </Folder>

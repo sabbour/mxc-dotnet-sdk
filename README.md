@@ -2,10 +2,35 @@
 
 [![CI](https://github.com/sabbour/mxc-dotnet-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/sabbour/mxc-dotnet-sdk/actions/workflows/ci.yml) [![NuGet](https://img.shields.io/nuget/v/Sabbour.Mxc.Sdk.svg)](https://www.nuget.org/packages/Sabbour.Mxc.Sdk) [![NuGet downloads](https://img.shields.io/nuget/dt/Sabbour.Mxc.Sdk.svg)](https://www.nuget.org/packages/Sabbour.Mxc.Sdk) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 
-A .NET 10 SDK for [MXC (Microsoft eXecution Containers)](https://github.com/microsoft/mxc) — a faithful port of the TypeScript `@microsoft/mxc-sdk` package.
+A .NET 10 SDK for [MXC (Microsoft eXecution Containers)](https://github.com/microsoft/mxc) — a faithful port of the TypeScript `@microsoft/mxc-sdk` package that brings the same policy-driven sandboxing to .NET applications. MXC runs a command inside OS-level isolation governed by a single policy: it decides which filesystem paths the process can read or write and whether it can reach the network, and enforces those limits at the kernel boundary.
 
 > [!WARNING]
 > This is experimental code. APIs, behavior, and packaging may change without notice, and it is not supported for production use. The underlying MXC executor is itself under active development.
+
+## Policy enforcement in action
+
+One small probe tries two things: fetch a URL over the network and read a secret file that lives *outside* its workspace. The SDK runs that **same probe twice** through `MxcSdk.SpawnSandboxAsync`, changing nothing but the `SandboxPolicy`:
+
+```text
+$ dotnet run --project examples/10-policy-enforcement -c Release
+
+secret file: /tmp/mxc-policy-demo/secret.txt (outside the workspace)
+workspace:   /tmp/mxc-policy-demo/workspace
+
+=== WITHOUT restrictions  (allowOutbound=true, secret folder readable) ===
+[network]    curl https://api.github.com/zen
+Anything added dilutes everything else.
+[filesystem] cat /tmp/mxc-policy-demo/secret.txt
+API_KEY=do-not-leak
+
+=== WITH policy           (allowOutbound=false, only workspace readable) ===
+[network]    curl https://api.github.com/zen
+curl: (6) Could not resolve host: api.github.com
+[filesystem] cat /tmp/mxc-policy-demo/secret.txt
+cat: /tmp/mxc-policy-demo/secret.txt: No such file or directory
+```
+
+Without the policy, the probe reaches GitHub (the quote is live, so it changes per run) and prints the secret. With the policy, both attempts fail at the kernel boundary: outbound traffic is gone because the sandbox runs in its own network namespace, and the secret reads as missing because the file was never mounted into the sandbox — denial by absence, not an error code. Same binary in both runs; only the policy differs. Full walkthrough: [`examples/10-policy-enforcement`](examples/10-policy-enforcement). Output captured on WSL2 (Ubuntu 24.04) with the Linux `lxc-exec` executor.
 
 ## Install
 
@@ -24,8 +49,7 @@ Or add a `PackageReference` to your `.csproj`:
 ## Table of contents
 
 - [Quickstart](#quickstart)
-- [Execution examples](#execution-examples)
-  - [Policy enforcement, side by side](#policy-enforcement-side-by-side)
+- [Examples](#examples)
 - [API guide](#api-guide)
   - [Policy → ContainerConfig transform](#policy--containerconfig-transform)
   - [Spawning](#spawning)
@@ -58,323 +82,14 @@ Console.WriteLine(config.Containment);
 
 Spawning a sandboxed process uses the same policy, but it also needs the native MXC executor. See [No CLI / executor resolution](#no-cli--executor-resolution) before running spawn examples.
 
-## Execution examples
+## Examples
 
-The [`examples/`](examples/) folder contains runnable console projects that reference the local SDK source. The table in [`examples/README.md`](examples/README.md) is the canonical scenario list and marks which examples need the native executor.
+The [`examples/`](examples/) folder has runnable console projects that reference the local SDK source, one per scenario — policy-to-config transforms, platform probing, buffered spawns, filesystem and network policy, the state-aware lifecycle, and the side-by-side [policy enforcement demo](examples/10-policy-enforcement) shown above. See [`examples/README.md`](examples/README.md) for the full list and which ones need the native executor.
 
-The commands below were run with `-c Release` from the repository root.
-
-### Policy enforcement, side by side
-
-[`10-policy-enforcement`](examples/10-policy-enforcement) is the demo worth seeing first. One small probe tries two things — fetch a URL over the network and read a secret file that lives *outside* its workspace:
-
-```text
-[network]    curl https://api.github.com/zen
-[filesystem] cat /tmp/mxc-policy-demo/secret.txt
-```
-
-The SDK runs that **same probe twice** through `MxcSdk.SpawnSandboxAsync`, changing nothing but the [`SandboxPolicy`](src/Sabbour.Mxc.Sdk):
-
-- **Permissive** — `Network.AllowOutbound = true`, and the secret's folder is in `Filesystem.ReadwritePaths`.
-- **Restrictive** — `Network.AllowOutbound = false`, and only the workspace is in `ReadwritePaths`, so the secret folder is never exposed.
-
-The output below is captured from a WSL2 (Ubuntu 24.04) run using the Linux `lxc-exec` executor with bubblewrap containment:
-
-```text
-$ dotnet run --project examples/10-policy-enforcement -c Release
-
-secret file: /tmp/mxc-policy-demo/secret.txt (outside the workspace)
-workspace:   /tmp/mxc-policy-demo/workspace
-
-=== WITHOUT restrictions  (allowOutbound=true, secret folder readable) ===
-[network]    curl https://api.github.com/zen
-Anything added dilutes everything else.
-[filesystem] cat /tmp/mxc-policy-demo/secret.txt
-API_KEY=do-not-leak
-
-=== WITH policy           (allowOutbound=false, only workspace readable) ===
-[network]    curl https://api.github.com/zen
-curl: (6) Could not resolve host: api.github.com
-[filesystem] cat /tmp/mxc-policy-demo/secret.txt
-cat: /tmp/mxc-policy-demo/secret.txt: No such file or directory
-```
-
-Without the policy, the probe reaches GitHub (the quote is live, so it changes per run) and prints the secret. With the policy, both attempts fail at the kernel boundary: outbound traffic is gone because the sandbox runs in its own network namespace, and the secret is reported missing because the file was never mounted into the sandbox — denial by absence, not by an error code. The probe binary is unchanged between the two runs; only the policy differs.
-
-This example needs the native MXC executor (see [Running the tests](#running-the-tests) for setup). On Windows hosts it adapts the probe to `cmd`/`type`; backend availability is covered in [Enabling isolation backends](#enabling-isolation-backends-host-setup).
-
-The remaining examples each focus on a single scenario.
-
-### `01-policy-to-config` — policy to backend config
+Run any example with:
 
 ```powershell
 dotnet run --project examples\01-policy-to-config -c Release
-```
-
-```text
-Policy -> backend ContainerConfig transform. This example needs no native binary.
-{
-  "version": "0.6.0-alpha",
-  "containerId": "5ce1e9ed",
-  "lifecycle": {
-    "destroyOnExit": true,
-    "preservePolicy": false
-  },
-  "process": {
-    "commandLine": "",
-    "timeout": 0
-  },
-  "filesystem": {
-    "readwritePaths": [
-      "C:\\Users\\asabbour\\Git\\mxc-dotnet-sdk"
-    ],
-    "readonlyPaths": [],
-    "deniedPaths": []
-  },
-  "ui": {
-    "disable": true,
-    "clipboard": "none",
-    "injection": false
-  },
-  "network": {
-    "defaultPolicy": "allow",
-    "enforcementMode": "capabilities"
-  },
-  "containment": "process",
-  "processContainer": {
-    "name": "5ce1e9ed",
-    "leastPrivilege": false,
-    "capabilities": [
-      "internetClient"
-    ],
-    "ui": {
-      "isolation": "container",
-      "desktopSystemControl": false,
-      "systemSettings": "none",
-      "ime": false
-    }
-  }
-}
-```
-
-### `02-platform-support` — platform probe
-
-```powershell
-dotnet run --project examples\02-platform-support -c Release
-```
-
-```text
-Platform support probe. This detects sandbox backends on the current host.
-IsSupported: True
-AvailableMethods: ProcessContainer
-IsolationTier:
-```
-
-### `03-buffered-spawn` — buffered stdout/stderr
-
-```powershell
-dotnet run --project examples\03-buffered-spawn -c Release
-```
-
-This scenario needs the native MXC executor. Set `MXC_BIN_DIR` or `SandboxSpawnOptions.ExecutablePath` first; see [Running the tests](#running-the-tests) for executor setup.
-
-### `04-network-policy` — host-filtering validation
-
-```powershell
-dotnet run --project examples\04-network-policy -c Release
-```
-
-```text
-Valid policy succeeded: allowOutbound=true with allowedHosts=[api.contoso.com].
-Caught expected validation error: allowedHosts/blockedHosts require allowOutbound to be true
-Host filtering requires allowOutbound=true unless the selected backend can enforce per-host rules itself.
-```
-
-### `05-state-aware-lifecycle` — provision/start/exec/stop/deprovision
-
-```powershell
-dotnet run --project examples\05-state-aware-lifecycle -c Release
-```
-
-This scenario needs the native MXC executor. Set `MXC_BIN_DIR` or `SandboxSpawnOptions.ExecutablePath` first; see [Running the tests](#running-the-tests) for executor setup.
-
-### `06-hello-world` — sandboxed command with a named container
-
-```powershell
-dotnet run --project examples\06-hello-world -c Release
-```
-
-With no executor installed, the example exits cleanly and prints the setup guidance:
-
-```text
-The native executor could not run this scenario: wxc-exec.exe not found. Set ExecutablePath or ensure it exists in a standard location.
-This scenario needs the MXC executor.
-Download mxc-release-binaries.zip from https://github.com/microsoft/mxc/releases (v0.6.1), unzip it, and set MXC_BIN_DIR to the folder containing <arch>\wxc-exec.exe.
-Then run this example again.
-```
-
-### `07-filesystem-access` — read/write, read-only, and denied paths
-
-```powershell
-dotnet run --project examples\07-filesystem-access -c Release
-```
-
-```text
-Filesystem access control policy -> backend ContainerConfig. This example needs no native binary.
-readwritePaths grant read+write, readonlyPaths grant read, deniedPaths block all access, and clearPolicyOnExit resets the policy when the shell exits.
-{
-  "version": "0.6.0-alpha",
-  "containerId": "1f10e57f",
-  "lifecycle": {
-    "destroyOnExit": true,
-    "preservePolicy": false
-  },
-  "process": {
-    "commandLine": "",
-    "timeout": 0
-  },
-  "filesystem": {
-    "readwritePaths": [
-      "C:\\temp\\workspace"
-    ],
-    "readonlyPaths": [
-      "C:\\ProgramData\\shared-config"
-    ],
-    "deniedPaths": [
-      "C:\\Windows\\System32"
-    ]
-  },
-  "ui": {
-    "disable": true,
-    "clipboard": "none",
-    "injection": false
-  },
-  "network": {
-    "defaultPolicy": "block",
-    "enforcementMode": "capabilities"
-  },
-  "containment": "process",
-  "processContainer": {
-    "name": "1f10e57f",
-    "leastPrivilege": false,
-    "capabilities": [],
-    "ui": {
-      "isolation": "container",
-      "desktopSystemControl": false,
-      "systemSettings": "none",
-      "ime": false
-    }
-  }
-}
-```
-
-### `08-network-restricted` — outbound allow-list
-
-```powershell
-dotnet run --project examples\08-network-restricted -c Release
-```
-
-This scenario needs the native MXC executor. Set `MXC_BIN_DIR` or `SandboxSpawnOptions.ExecutablePath` first; see [Running the tests](#running-the-tests) for executor setup.
-
-### `09-network-proxy` — localhost and built-in proxy config
-
-```powershell
-dotnet run --project examples\09-network-proxy -c Release
-```
-
-```text
-Network proxy policy -> backend ContainerConfig. This example needs no native binary.
-ProxyConfig is a discriminated union: choose exactly one of localhost, builtinTestServer, or url.
-
-1) Route traffic through an external proxy on localhost:8080.
-{
-  "version": "0.6.0-alpha",
-  "containerId": "da7fde8e",
-  "lifecycle": {
-    "destroyOnExit": true,
-    "preservePolicy": false
-  },
-  "process": {
-    "commandLine": "",
-    "timeout": 0
-  },
-  "filesystem": {
-    "readwritePaths": [],
-    "readonlyPaths": [],
-    "deniedPaths": []
-  },
-  "ui": {
-    "disable": true,
-    "clipboard": "none",
-    "injection": false
-  },
-  "network": {
-    "defaultPolicy": "allow",
-    "proxy": {
-      "localhost": 8080
-    },
-    "enforcementMode": "capabilities"
-  },
-  "containment": "process",
-  "processContainer": {
-    "name": "da7fde8e",
-    "leastPrivilege": false,
-    "capabilities": [
-      "internetClient"
-    ],
-    "ui": {
-      "isolation": "container",
-      "desktopSystemControl": false,
-      "systemSettings": "none",
-      "ime": false
-    }
-  }
-}
-
-2) Route traffic through the built-in test proxy server.
-{
-  "version": "0.6.0-alpha",
-  "containerId": "4d8bb604",
-  "lifecycle": {
-    "destroyOnExit": true,
-    "preservePolicy": false
-  },
-  "process": {
-    "commandLine": "",
-    "timeout": 0
-  },
-  "filesystem": {
-    "readwritePaths": [],
-    "readonlyPaths": [],
-    "deniedPaths": []
-  },
-  "ui": {
-    "disable": true,
-    "clipboard": "none",
-    "injection": false
-  },
-  "network": {
-    "defaultPolicy": "allow",
-    "proxy": {
-      "builtinTestServer": true
-    },
-    "enforcementMode": "capabilities"
-  },
-  "containment": "process",
-  "processContainer": {
-    "name": "4d8bb604",
-    "leastPrivilege": false,
-    "capabilities": [
-      "internetClient"
-    ],
-    "ui": {
-      "isolation": "container",
-      "desktopSystemControl": false,
-      "systemSettings": "none",
-      "ime": false
-    }
-  }
-}
 ```
 
 ## API guide

@@ -186,6 +186,7 @@ public static class SandboxFactory
         }
 
         var network = policy.Network;
+        PolicyTransform.ValidateProxyContainmentSupport(network, containment, platform);
         PolicyTransform.ValidateHostFilteringRequiresAllowOutbound(network, containment, platform);
 
         return config with

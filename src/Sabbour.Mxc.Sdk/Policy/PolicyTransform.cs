@@ -138,22 +138,7 @@ internal static class PolicyTransform
 
         var net = policy.Network;
 
-        // Proxy validation: only Bubblewrap (or abstract process) on Linux, never macOS
-        if (net.Proxy is not null && platform == Platforms.Linux)
-        {
-            bool linuxProxySupported = containment is "bubblewrap" or "process";
-            if (!linuxProxySupported)
-            {
-                throw new InvalidOperationException(
-                    $"Proxy configuration is not supported on Linux containment='{containment}'. " +
-                    "Use containment 'bubblewrap' (or the abstract 'process') for proxy-based host filtering.");
-            }
-        }
-        if (net.Proxy is not null && platform == Platforms.MacOS)
-        {
-            throw new InvalidOperationException("Proxy configuration is not supported on macOS");
-        }
-
+        ValidateProxyContainmentSupport(net, containment, platform);
         ValidateHostFilteringRequiresAllowOutbound(net, containment, platform);
 
         return new NetworkConfig
@@ -323,6 +308,33 @@ internal static class PolicyTransform
     // -----------------------------------------------------------------------
     // Helpers
     // -----------------------------------------------------------------------
+
+    internal static void ValidateProxyContainmentSupport(
+        NetworkPolicy network,
+        string containment,
+        string platform)
+    {
+        if (network.Proxy is null)
+        {
+            return;
+        }
+
+        if (platform == Platforms.Linux)
+        {
+            bool linuxProxySupported = containment is "bubblewrap" or "process";
+            if (!linuxProxySupported)
+            {
+                throw new InvalidOperationException(
+                    $"Proxy configuration is not supported on Linux containment='{containment}'. " +
+                    "Use containment 'bubblewrap' (or the abstract 'process') for proxy-based host filtering.");
+            }
+        }
+
+        if (platform == Platforms.MacOS)
+        {
+            throw new InvalidOperationException("Proxy configuration is not supported on macOS");
+        }
+    }
 
     internal static void ValidateHostFilteringRequiresAllowOutbound(
         NetworkPolicy network,

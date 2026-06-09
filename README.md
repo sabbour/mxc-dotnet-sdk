@@ -7,25 +7,6 @@ A .NET 10 SDK for [MXC (Microsoft eXecution Containers)](https://github.com/micr
 > [!WARNING]
 > This is experimental code. APIs, behavior, and packaging may change without notice, and it is not supported for production use. The underlying MXC executor is itself under active development.
 
-## Table of contents
-
-- [Policy enforcement in action](#policy-enforcement-in-action)
-- [Install](#install)
-- [Enabling isolation backends (host setup)](#enabling-isolation-backends-host-setup)
-- [Quickstart](#quickstart)
-- [Examples](#examples)
-- [API guide](#api-guide)
-  - [Policy → ContainerConfig transform](#policy--containerconfig-transform)
-  - [Spawning](#spawning)
-  - [State-aware isolation session lifecycle](#state-aware-isolation-session-lifecycle)
-  - [Platform support probing](#platform-support-probing)
-  - [Error handling](#error-handling)
-  - [Logging and diagnostics](#logging-and-diagnostics)
-- [Version support](#version-support)
-- [Running the tests](#running-the-tests)
-- [Troubleshooting](#troubleshooting)
-- [License](#license)
-
 ## Policy enforcement in action
 
 One small probe does two things a workload usually should not: it reaches the network, then reads an SSH private key that lives *outside* its workspace. The SDK runs that **same probe twice** through `MxcSdk.SpawnSandboxAsync`, changing nothing but the `SandboxPolicy`:
@@ -85,7 +66,7 @@ curl: (6) Could not resolve host: api.github.com
 cat: /tmp/mxc-policy-demo/home/.ssh/id_ed25519: No such file or directory
 ```
 
-Without the policy, the probe reaches GitHub (the quote is live, so it changes per run) and prints the private key. With the policy, both attempts fail at the kernel boundary: outbound traffic is gone because the sandbox runs in its own network namespace, and the key reads as missing because its folder was never mounted into the sandbox — denial by absence, not an error code. Same binary in both runs; only the policy differs. Full walkthrough: [`examples/10-policy-enforcement`](examples/10-policy-enforcement). Output captured on WSL2 (Ubuntu 24.04) with the Linux `lxc-exec` executor.
+Same binary, same command — flip one policy and the workload goes from leaking a private key over the open internet to hitting a wall it can't even see. The lockdown happens at the kernel boundary, not in your code: outbound traffic vanishes because the sandbox lives in its own network namespace, and the key simply isn't there because its folder was never mounted — denial by absence, not a permission error you have to remember to check. (The GitHub quote is live, so it changes every run.) Full walkthrough: [`examples/10-policy-enforcement`](examples/10-policy-enforcement). Output captured on WSL2 (Ubuntu 24.04) with the Linux `lxc-exec` executor.
 
 ## Install
 

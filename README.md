@@ -1,4 +1,4 @@
-# Sabbour.Mxc.Sdk
+# Sabbour.Mxc.Sdk — unofficial, experimental .NET SDK for MXC (Microsoft eXecution Containers)
 
 [![CI](https://github.com/sabbour/mxc-dotnet-sdk/actions/workflows/ci.yml/badge.svg)](https://github.com/sabbour/mxc-dotnet-sdk/actions/workflows/ci.yml) [![NuGet](https://img.shields.io/nuget/v/Sabbour.Mxc.Sdk.svg)](https://www.nuget.org/packages/Sabbour.Mxc.Sdk) [![NuGet downloads](https://img.shields.io/nuget/dt/Sabbour.Mxc.Sdk.svg)](https://www.nuget.org/packages/Sabbour.Mxc.Sdk) [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE) [![.NET](https://img.shields.io/badge/.NET-10.0-512BD4.svg)](https://dotnet.microsoft.com/)
 
@@ -6,6 +6,25 @@ A .NET 10 SDK for [MXC (Microsoft eXecution Containers)](https://github.com/micr
 
 > [!WARNING]
 > This is experimental code. APIs, behavior, and packaging may change without notice, and it is not supported for production use. The underlying MXC executor is itself under active development.
+
+## Table of contents
+
+- [Policy enforcement in action](#policy-enforcement-in-action)
+- [Install](#install)
+- [Enabling isolation backends (host setup)](#enabling-isolation-backends-host-setup)
+- [Quickstart](#quickstart)
+- [Examples](#examples)
+- [API guide](#api-guide)
+  - [Policy → ContainerConfig transform](#policy--containerconfig-transform)
+  - [Spawning](#spawning)
+  - [State-aware isolation session lifecycle](#state-aware-isolation-session-lifecycle)
+  - [Platform support probing](#platform-support-probing)
+  - [Error handling](#error-handling)
+  - [Logging and diagnostics](#logging-and-diagnostics)
+- [Version support](#version-support)
+- [Running the tests](#running-the-tests)
+- [Troubleshooting](#troubleshooting)
+- [License](#license)
 
 ## Policy enforcement in action
 
@@ -46,22 +65,103 @@ Or add a `PackageReference` to your `.csproj`:
 <PackageReference Include="Sabbour.Mxc.Sdk" Version="0.6.1" />
 ```
 
-## Table of contents
+## Enabling isolation backends (host setup)
 
-- [Quickstart](#quickstart)
-- [Examples](#examples)
-- [API guide](#api-guide)
-  - [Policy → ContainerConfig transform](#policy--containerconfig-transform)
-  - [Spawning](#spawning)
-  - [State-aware isolation session lifecycle](#state-aware-isolation-session-lifecycle)
-  - [Platform support probing](#platform-support-probing)
-  - [Error handling](#error-handling)
-  - [Logging and diagnostics](#logging-and-diagnostics)
-- [Version support](#version-support)
-- [No CLI / executor resolution](#no-cli--executor-resolution)
-- [Running the tests](#running-the-tests)
-- [Enabling isolation backends (host setup)](#enabling-isolation-backends-host-setup)
-- [License](#license)
+The SDK picks a containment backend, but the host has to have that backend lit up first. Which backends are available depends on the host OS — Windows and WSL/Linux are covered separately below.
+
+### Windows host
+
+The default `processcontainer` path works out of the box on recent Windows builds; the other backends need one-time setup. The steps below are the ones that get each backend running with the `v0.6.1` executor binaries.
+
+Check which tier the executor will select on the current host (read-only, no admin):
+
+```powershell
+$arch = "x64" # use "arm64" on ARM64 hosts
+& "$env:MXC_BIN_DIR\$arch\wxc-exec.exe" --probe
+```
+
+#### processcontainer
+
+`processcontainer` has three tiers (highest first): `base-container`, `appcontainer-bfs`, `appcontainer-dacl`. The probe reports which one applies.
+
+- **`base-container`** uses an experimental kernel API that ships behind a Windows Feature Store gate on current builds. When the gate is closed, the executor returns `E_NOTIMPL` even though the API is present. Light it up with [ViVeTool](https://github.com/thebookisclosed/ViVe) (download the build that matches your CPU arch), then **reboot**:
+
+  ```powershell
+  # Run elevated. Use comma-separated IDs — repeated /id: flags are rejected.
+  .\ViVeTool.exe /enable /id:61389575,61155944
+  .\ViVeTool.exe /query /id:61389575
+  ```
+
+  The query command should report the feature as enabled before you retry the executor.
+
+  Older policy schemas (`0.4.0-alpha`) take the ungated AppContainer path instead, so they run without this gate.
+
+- **`appcontainer-dacl`** needs a one-time host preparation that grants the AppContainer SIDs the ACEs they require. Run `wxc-host-prep` elevated (it exits non-zero if not):
+
+  ```powershell
+  $arch = "x64" # use "arm64" on ARM64 hosts
+  & "$env:MXC_BIN_DIR\$arch\wxc-host-prep.exe" prepare-system-drive   # one-time, persists
+  & "$env:MXC_BIN_DIR\$arch\wxc-host-prep.exe" prepare-null-device    # per-boot
+  ```
+
+#### windows_sandbox
+
+A real disposable-VM backend (host daemon + in-VM guest). Enable the Windows Sandbox feature elevated, then **reboot**:
+
+```powershell
+Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
+```
+
+It also needs hardware virtualization enabled in firmware and Python on the host. On Windows builds 26100 and newer there is a documented boot regression (zombie VM processes) that can keep the sandbox VM from starting even when the feature is enabled.
+
+This backend is not selectable through `CreateConfigFromPolicy` (matching upstream — its `createConfigFromPolicy` has no branch for it either). Reach it with a prebuilt config plus the experimental flag:
+
+```csharp
+var config = MxcSdk.BuildSandboxPayload("echo hi", policy, containment: "windows_sandbox");
+using var conn = MxcSdk.SpawnSandboxProcessFromConfig(config,
+    new SandboxSpawnOptions { Experimental = true, UsePty = false });
+```
+
+#### microvm (NanVix)
+
+Requires the `nanvixd.exe` daemon, which is **not included** in the public `mxc-release-binaries.zip`, so it cannot run from the released binaries. This backend also rejects any policy that sets `network` (no network-policy enforcement).
+
+#### wslc
+
+`wslc` runs Linux OCI containers in a dedicated WSL-managed Hyper-V VM. It is still under development and requires WSL 2.8.1 or newer.
+
+#### hyperlight
+
+`hyperlight` runs workloads as x86_64 guest code inside a hardware micro-VM (WHP on Windows, KVM on Linux). It requires an **x86_64 host** — the snapshot tooling has no arm64 guest, so on an arm64 machine `--setup-hyperlight` exits with `requires x86_64 (Hyperlight needs KVM or WHP)`.
+
+On an x86_64 host, warm the published snapshot once before first use (pulls the kernel + initrd via docker/podman):
+
+```powershell
+& "$env:MXC_BIN_DIR\x64\wxc-exec.exe" --setup-hyperlight
+```
+
+Like `windows_sandbox`, `hyperlight` is reached through a prebuilt config with `Experimental = true`, not through `CreateConfigFromPolicy`.
+
+### WSL / Linux host
+
+On WSL2 / Linux the SDK uses the Linux executor (`lxc-exec`). Two things light it up — verified on Ubuntu-24.04 (arm64) under WSL2, where the default `process` containment runs cleanly:
+
+1. **Place the Linux executor where the SDK looks for it.** The released `mxc-release-binaries.zip` ships the Windows `wxc-exec.exe`; on Linux the SDK resolves `lxc-exec` from `MXC_BIN_DIR/<arch>/` (`<arch>` is `arm64` or `x64`). Copy the Linux `lxc-exec` build there and mark it executable:
+
+   ```bash
+   mkdir -p "$HOME/mxc-bin/arm64"
+   cp ./lxc-exec "$HOME/mxc-bin/arm64/lxc-exec"
+   chmod +x "$HOME/mxc-bin/arm64/lxc-exec"
+   export MXC_BIN_DIR="$HOME/mxc-bin"
+   ```
+
+2. **Install bubblewrap.** The default `process` containment runs the workload under `bwrap`. Without it the executor exits with `Bubblewrap (bwrap) is not installed or not on PATH`:
+
+   ```bash
+   sudo apt-get install -y bubblewrap
+   ```
+
+The `process`, `lxc`, and `bubblewrap` containments target this Linux executor. The Windows-only backends (`windows_sandbox`, `microvm`, `hyperlight`) are not reachable from WSL — `microvm`/`hyperlight` need an x86_64 host with KVM, which is not exposed inside this WSL2 VM.
 
 ## Quickstart
 
@@ -80,7 +180,7 @@ ContainerConfig config = MxcSdk.CreateConfigFromPolicy(policy, containment: "pro
 Console.WriteLine(config.Containment);
 ```
 
-Spawning a sandboxed process uses the same policy, but it also needs the native MXC executor. See [No CLI / executor resolution](#no-cli--executor-resolution) before running spawn examples.
+Spawning a sandboxed process uses the same policy, but it also needs the native MXC executor. See [Troubleshooting](#troubleshooting) before running spawn examples.
 
 ## Examples
 
@@ -240,18 +340,6 @@ This SDK validates the policy `version` field. The example pins `0.6.0-alpha`, t
 
 For the canonical field reference — `version`, `filesystem`, `network`, `ui`, and `timeoutMs` — see the upstream [MXC Sandbox Policy Spec §5 (SandboxPolicy)](https://github.com/microsoft/mxc/blob/v0.6.1/docs/sandbox-policy/v1/policy.md#5-sandboxpolicy), pinned to the `v0.6.1` release.
 
-## No CLI / executor resolution
-
-This package is a library, not a command-line tool. Sandbox execution shells out to the native MXC executor (`wxc-exec.exe` on Windows, `lxc-exec` on Linux, and `mxc-exec-mac` for macOS seatbelt).
-
-Use one of these resolution paths:
-
-1. Set `SandboxSpawnOptions.ExecutablePath` for a single spawn.
-2. Set `MXC_BIN_DIR` to the root directory that contains `<arch>\wxc-exec.exe` on Windows, or `<arch>/lxc-exec` on Linux (`<arch>` is `x64` or `arm64`).
-3. Package/publish layouts can include `bin\<arch>\...` next to the SDK assembly or app base directory.
-4. Development builds can be found under repo Cargo target paths.
-5. On Windows, `PATH` is a last fallback. Prefer `ExecutablePath` or `MXC_BIN_DIR` for predictable behavior.
-
 ## Running the tests
 
 ### Tier 1: unit tests
@@ -276,103 +364,29 @@ dotnet test
 
 For test runs, prefer `$env:MXC_BIN_DIR\x64\wxc-exec.exe` or `$env:MXC_BIN_DIR\arm64\wxc-exec.exe` so the executor path is deterministic. On Windows, the default `processcontainer` backend needs Windows 11 24H2 or later (build 26100+) and does not require admin.
 
-## Enabling isolation backends (host setup)
+## Troubleshooting
 
-The SDK picks a containment backend, but the host has to have that backend lit up first. Which backends are available depends on the host OS — Windows and WSL/Linux are covered separately below.
+### The SDK cannot find the executor
 
-### Windows host
+This package is a library, not a command-line tool. Sandbox execution shells out to the native MXC executor (`wxc-exec.exe` on Windows, `lxc-exec` on Linux, and `mxc-exec-mac` for macOS seatbelt).
 
-The default `processcontainer` path works out of the box on recent Windows builds; the other backends need one-time setup. The steps below are the ones that get each backend running with the `v0.6.1` executor binaries.
+Use one of these resolution paths:
 
-Check which tier the executor will select on the current host (read-only, no admin):
+1. Set `SandboxSpawnOptions.ExecutablePath` for a single spawn.
+2. Set `MXC_BIN_DIR` to the root directory that contains `<arch>\wxc-exec.exe` on Windows, or `<arch>/lxc-exec` on Linux (`<arch>` is `x64` or `arm64`).
+3. Package/publish layouts can include `bin\<arch>\...` next to the SDK assembly or app base directory.
+4. Development builds can be found under repo Cargo target paths.
+5. On Windows, `PATH` is a last fallback. Prefer `ExecutablePath` or `MXC_BIN_DIR` for predictable behavior.
 
-```powershell
-$arch = "x64" # use "arm64" on ARM64 hosts
-& "$env:MXC_BIN_DIR\$arch\wxc-exec.exe" --probe
-```
+### Common errors
 
-#### processcontainer
-
-`processcontainer` has three tiers (highest first): `base-container`, `appcontainer-bfs`, `appcontainer-dacl`. The probe reports which one applies.
-
-- **`base-container`** uses an experimental kernel API that ships behind a Windows Feature Store gate on current builds. When the gate is closed, the executor returns `E_NOTIMPL` even though the API is present. Light it up with [ViVeTool](https://github.com/thebookisclosed/ViVe) (download the build that matches your CPU arch), then **reboot**:
-
-  ```powershell
-  # Run elevated. Use comma-separated IDs — repeated /id: flags are rejected.
-  .\ViVeTool.exe /enable /id:61389575,61155944
-  .\ViVeTool.exe /query /id:61389575
-  ```
-
-  The query command should report the feature as enabled before you retry the executor.
-
-  Older policy schemas (`0.4.0-alpha`) take the ungated AppContainer path instead, so they run without this gate.
-
-- **`appcontainer-dacl`** needs a one-time host preparation that grants the AppContainer SIDs the ACEs they require. Run `wxc-host-prep` elevated (it exits non-zero if not):
-
-  ```powershell
-  $arch = "x64" # use "arm64" on ARM64 hosts
-  & "$env:MXC_BIN_DIR\$arch\wxc-host-prep.exe" prepare-system-drive   # one-time, persists
-  & "$env:MXC_BIN_DIR\$arch\wxc-host-prep.exe" prepare-null-device    # per-boot
-  ```
-
-#### windows_sandbox
-
-A real disposable-VM backend (host daemon + in-VM guest). Enable the Windows Sandbox feature elevated, then **reboot**:
-
-```powershell
-Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM -All
-```
-
-It also needs hardware virtualization enabled in firmware and Python on the host. On Windows builds 26100 and newer there is a documented boot regression (zombie VM processes) that can keep the sandbox VM from starting even when the feature is enabled.
-
-This backend is not selectable through `CreateConfigFromPolicy` (matching upstream — its `createConfigFromPolicy` has no branch for it either). Reach it with a prebuilt config plus the experimental flag:
-
-```csharp
-var config = MxcSdk.BuildSandboxPayload("echo hi", policy, containment: "windows_sandbox");
-using var conn = MxcSdk.SpawnSandboxProcessFromConfig(config,
-    new SandboxSpawnOptions { Experimental = true, UsePty = false });
-```
-
-#### microvm (NanVix)
-
-Requires the `nanvixd.exe` daemon, which is **not included** in the public `mxc-release-binaries.zip`, so it cannot run from the released binaries. This backend also rejects any policy that sets `network` (no network-policy enforcement).
-
-#### wslc
-
-`wslc` runs Linux OCI containers in a dedicated WSL-managed Hyper-V VM. It is still under development and requires WSL 2.8.1 or newer.
-
-#### hyperlight
-
-`hyperlight` runs workloads as x86_64 guest code inside a hardware micro-VM (WHP on Windows, KVM on Linux). It requires an **x86_64 host** — the snapshot tooling has no arm64 guest, so on an arm64 machine `--setup-hyperlight` exits with `requires x86_64 (Hyperlight needs KVM or WHP)`.
-
-On an x86_64 host, warm the published snapshot once before first use (pulls the kernel + initrd via docker/podman):
-
-```powershell
-& "$env:MXC_BIN_DIR\x64\wxc-exec.exe" --setup-hyperlight
-```
-
-Like `windows_sandbox`, `hyperlight` is reached through a prebuilt config with `Experimental = true`, not through `CreateConfigFromPolicy`.
-
-### WSL / Linux host
-
-On WSL2 / Linux the SDK uses the Linux executor (`lxc-exec`). Two things light it up — verified on Ubuntu-24.04 (arm64) under WSL2, where the default `process` containment runs cleanly:
-
-1. **Place the Linux executor where the SDK looks for it.** The released `mxc-release-binaries.zip` ships the Windows `wxc-exec.exe`; on Linux the SDK resolves `lxc-exec` from `MXC_BIN_DIR/<arch>/` (`<arch>` is `arm64` or `x64`). Copy the Linux `lxc-exec` build there and mark it executable:
-
-   ```bash
-   mkdir -p "$HOME/mxc-bin/arm64"
-   cp ./lxc-exec "$HOME/mxc-bin/arm64/lxc-exec"
-   chmod +x "$HOME/mxc-bin/arm64/lxc-exec"
-   export MXC_BIN_DIR="$HOME/mxc-bin"
-   ```
-
-2. **Install bubblewrap.** The default `process` containment runs the workload under `bwrap`. Without it the executor exits with `Bubblewrap (bwrap) is not installed or not on PATH`:
-
-   ```bash
-   sudo apt-get install -y bubblewrap
-   ```
-
-The `process`, `lxc`, and `bubblewrap` containments target this Linux executor. The Windows-only backends (`windows_sandbox`, `microvm`, `hyperlight`) are not reachable from WSL — `microvm`/`hyperlight` need an x86_64 host with KVM, which is not exposed inside this WSL2 VM.
+| Symptom | Cause | Fix |
+| --- | --- | --- |
+| `wxc-exec.exe not found` / `lxc-exec not found` | The SDK cannot locate the executor. | Set `MXC_BIN_DIR` or `ExecutablePath` (see above). |
+| `Bubblewrap (bwrap) is not installed or not on PATH` | The Linux `process` containment runs the workload under `bwrap`. | `sudo apt-get install -y bubblewrap`. |
+| `E_NOTIMPL` from the Windows `base-container` tier | The Feature Store gate for the experimental kernel API is closed on this build. | Enable the velocity keys with ViVeTool and reboot — see [Enabling isolation backends](#enabling-isolation-backends-host-setup). |
+| `iptables ... Permission denied (you must be root)` | Host-based outbound allowlisting (`AllowedHosts`) programs `iptables`, which needs `CAP_NET_ADMIN`. | Run the host process elevated (`sudo`) on Linux/WSL. |
+| Policy rejected at config creation | The policy `version` is outside the supported range. | Use a `version` between `0.4.0-alpha` and `0.7.0-alpha` — see [Version support](#version-support). |
 
 ## License
 

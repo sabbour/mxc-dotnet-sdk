@@ -52,6 +52,7 @@ workspace:   /tmp/mxc-policy-demo/workspace
 === WITHOUT restrictions  (allowOutbound=true, credential folder readable) ===
 [network]    curl https://api.github.com/zen
 Non-blocking is better than blocking.
+
 [filesystem] cat /tmp/mxc-policy-demo/home/.ssh/id_ed25519
 -----BEGIN OPENSSH PRIVATE KEY-----
 b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW
@@ -65,8 +66,6 @@ curl: (6) Could not resolve host: api.github.com
 [filesystem] cat /tmp/mxc-policy-demo/home/.ssh/id_ed25519
 cat: /tmp/mxc-policy-demo/home/.ssh/id_ed25519: No such file or directory
 ```
-
-Same binary, same command — flip one policy and the workload goes from leaking a private key over the open internet to hitting a wall it can't even see. The lockdown happens at the kernel boundary, not in your code: outbound traffic vanishes because the sandbox lives in its own network namespace, and the key simply isn't there because its folder was never mounted — denial by absence, not a permission error you have to remember to check. (The GitHub quote is live, so it changes every run.) Full walkthrough: [`examples/10-policy-enforcement`](examples/10-policy-enforcement). Output captured on WSL2 (Ubuntu 24.04) with the Linux `lxc-exec` executor.
 
 ## Install
 

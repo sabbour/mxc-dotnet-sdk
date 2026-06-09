@@ -65,6 +65,7 @@ public class P5RemediationTests
         {
             Debug = true,
             LogDir = @"C:\logs",
+            SkipPlatformCheck = true,
             ExecutablePath = CreateFakeExecutable(),
         };
 
@@ -84,6 +85,7 @@ public class P5RemediationTests
             DryRun = true,
             Debug = true,
             Experimental = true,
+            SkipPlatformCheck = true,
             ExecutablePath = CreateFakeExecutable(),
         };
 

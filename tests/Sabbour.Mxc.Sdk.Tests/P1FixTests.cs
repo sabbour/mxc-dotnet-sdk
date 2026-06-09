@@ -11,6 +11,7 @@ namespace Sabbour.Mxc.Sdk.Tests;
 /// <summary>
 /// Tests proving each P1 post-build review fix (issues 1–6).
 /// </summary>
+[Collection("ConsoleRedirection")]
 public class P1FixTests
 {
     private static readonly JsonSerializerOptions s_options = new()

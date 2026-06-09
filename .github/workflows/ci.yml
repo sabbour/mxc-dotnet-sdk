@@ -23,11 +23,7 @@ jobs:
       fail-fast: false
       matrix:
         os:
-          # The test suite is Windows-bound: process-spawn fidelity tests launch cmd.exe and
-          # pass C:\Windows\System32\cmd.exe as the executable (SpawnHelper.ResolveExecutable
-          # requires the file to exist), so they cannot pass on Linux without a cross-platform
-          # port. The released executor (wxc-exec.exe) is Windows-first. Run CI on Windows only
-          # until the spawn tests are made cross-platform.
+          - ubuntu-latest
           - windows-latest
 
     steps:

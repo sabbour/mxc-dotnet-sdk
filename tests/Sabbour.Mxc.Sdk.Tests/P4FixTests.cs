@@ -160,21 +160,19 @@ internal sealed class BufferingFakePtyFactory : IPtyConnectionFactory
 }
 
 /// <summary>
-/// Fake process factory that spawns a configurable real cmd process.
+/// Fake process factory that spawns a configurable real host-shell process.
 /// </summary>
 internal sealed class ConfigurableFakeProcessFactory : IProcessConnectionFactory
 {
-    private readonly string _command;
-    private readonly string[] _args;
+    private readonly string _shellCommand;
 
     public string? LastExecutablePath { get; private set; }
     public IReadOnlyList<string>? LastArgs { get; private set; }
     public bool WasUsed { get; private set; }
 
-    public ConfigurableFakeProcessFactory(string command = "cmd.exe", params string[] args)
+    public ConfigurableFakeProcessFactory(string shellCommand = "echo ok")
     {
-        _command = command;
-        _args = args;
+        _shellCommand = shellCommand;
     }
 
     public ProcessConnection Spawn(string executablePath, IReadOnlyList<string> args, string? workingDirectory)
@@ -182,7 +180,7 @@ internal sealed class ConfigurableFakeProcessFactory : IProcessConnectionFactory
         LastExecutablePath = executablePath;
         LastArgs = args;
         WasUsed = true;
-        return ProcessConnection.Spawn(_command, _args, workingDirectory);
+        return TestShell.Spawn(_shellCommand, workingDirectory);
     }
 }
 
@@ -198,13 +196,13 @@ public class UsePtyRoutingTests
     {
         var pty = new FakePtyConnection();
         var ptyFactory = new FakePtyConnectionFactory(() => pty);
-        var processFactory = new ConfigurableFakeProcessFactory("cmd.exe", "/c", "echo test");
+        var processFactory = new ConfigurableFakeProcessFactory("echo test");
         var spawner = new SandboxSpawner(ptyFactory, processFactory);
 
         var config = TestConfigHelper.CreateTestConfig("echo hello");
         var options = new SandboxSpawnOptions
         {
-            ExecutablePath = @"C:\Windows\System32\cmd.exe",
+            ExecutablePath = TestShell.ExistingExecutablePath,
             UsePty = true,
         };
 
@@ -223,13 +221,13 @@ public class UsePtyRoutingTests
     public async Task SpawnSandboxFromConfigAsync_UsePtyFalse_UsesProcessFactory()
     {
         var ptyFactory = new FakePtyConnectionFactory();
-        var processFactory = new ConfigurableFakeProcessFactory("cmd.exe", "/c", "echo piped");
+        var processFactory = new ConfigurableFakeProcessFactory("echo piped");
         var spawner = new SandboxSpawner(ptyFactory, processFactory);
 
         var config = TestConfigHelper.CreateTestConfig("echo hello");
         var options = new SandboxSpawnOptions
         {
-            ExecutablePath = @"C:\Windows\System32\cmd.exe",
+            ExecutablePath = TestShell.ExistingExecutablePath,
             UsePty = false,
         };
 
@@ -246,13 +244,13 @@ public class UsePtyRoutingTests
     public async Task SpawnSandboxFromConfigAsync_UsePtyFalse_ReturnsValidExitCode()
     {
         var ptyFactory = new FakePtyConnectionFactory();
-        var processFactory = new ConfigurableFakeProcessFactory("cmd.exe", "/c", "echo done");
+        var processFactory = new ConfigurableFakeProcessFactory("echo done");
         var spawner = new SandboxSpawner(ptyFactory, processFactory);
 
         var config = TestConfigHelper.CreateTestConfig("echo hello");
         var options = new SandboxSpawnOptions
         {
-            ExecutablePath = @"C:\Windows\System32\cmd.exe",
+            ExecutablePath = TestShell.ExistingExecutablePath,
             UsePty = false,
         };
 
@@ -281,7 +279,7 @@ public class CommandLineValidationTests
             Version = "0.5.0",
             Process = new ProcessConfig { CommandLine = "" },
         };
-        var options = new SandboxSpawnOptions { ExecutablePath = @"C:\Windows\System32\cmd.exe" };
+        var options = new SandboxSpawnOptions { ExecutablePath = TestShell.ExistingExecutablePath };
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(
             () => spawner.SpawnSandboxFromConfigAsync(config, options));
@@ -301,7 +299,7 @@ public class CommandLineValidationTests
             Version = "0.5.0",
             Process = new ProcessConfig { CommandLine = "" },
         };
-        var options = new SandboxSpawnOptions { ExecutablePath = @"C:\Windows\System32\cmd.exe" };
+        var options = new SandboxSpawnOptions { ExecutablePath = TestShell.ExistingExecutablePath };
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => spawner.SpawnSandboxProcessFromConfig(config, options));
@@ -321,7 +319,7 @@ public class CommandLineValidationTests
             Version = "0.5.0",
             Process = null,
         };
-        var options = new SandboxSpawnOptions { ExecutablePath = @"C:\Windows\System32\cmd.exe" };
+        var options = new SandboxSpawnOptions { ExecutablePath = TestShell.ExistingExecutablePath };
 
         var ex = Assert.Throws<InvalidOperationException>(
             () => spawner.SpawnSandboxProcessFromConfig(config, options));
@@ -339,7 +337,7 @@ public class ProcessConnectionExitRaceTests
     public async Task FastExitingProcess_DoesNotHang()
     {
         // Spawn a process that exits immediately — should NOT hang
-        var conn = ProcessConnection.Spawn("cmd.exe", ["/c", "exit 0"], null);
+        var conn = TestShell.Spawn("exit 0");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var exitCode = await conn.WaitForExitAsync(cts.Token);
@@ -351,7 +349,7 @@ public class ProcessConnectionExitRaceTests
     [Fact]
     public async Task FastExitingProcess_NonZero_ReturnsCorrectCode()
     {
-        var conn = ProcessConnection.Spawn("cmd.exe", ["/c", "exit 42"], null);
+        var conn = TestShell.Spawn("exit 42");
 
         using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
         var exitCode = await conn.WaitForExitAsync(cts.Token);
@@ -364,7 +362,7 @@ public class ProcessConnectionExitRaceTests
     public async Task ImmediateExit_OutputStillCaptured()
     {
         // Process that writes and exits instantly
-        var conn = ProcessConnection.Spawn("cmd.exe", ["/c", "echo INSTANT_OUTPUT"], null);
+        var conn = TestShell.Spawn("echo INSTANT_OUTPUT");
 
         var exitCode = await conn.WaitForExitAsync();
 
@@ -390,7 +388,7 @@ public class PtyEarlyOutputTests
         var spawner = new SandboxSpawner(factory, new ConfigurableFakeProcessFactory());
 
         var config = TestConfigHelper.CreateTestConfig("echo hello");
-        var options = new SandboxSpawnOptions { ExecutablePath = @"C:\Windows\System32\cmd.exe" };
+        var options = new SandboxSpawnOptions { ExecutablePath = TestShell.ExistingExecutablePath };
 
         // Emit data BEFORE SpawnSandboxAsync attaches handler
         pty.EmitData("early-error-envelope\n");
@@ -416,7 +414,7 @@ public class PtyEarlyOutputTests
         var spawner = new SandboxSpawner(factory, new ConfigurableFakeProcessFactory());
 
         var config = TestConfigHelper.CreateTestConfig("echo hello");
-        var options = new SandboxSpawnOptions { ExecutablePath = @"C:\Windows\System32\cmd.exe" };
+        var options = new SandboxSpawnOptions { ExecutablePath = TestShell.ExistingExecutablePath };
 
         // Error envelope arrives before handler
         pty.EmitData("{\"error\":{\"code\":\"backend_error\",\"message\":\"early fail\"}}\n");
@@ -440,7 +438,7 @@ public class DebugLogFileTests
         var config = TestConfigHelper.CreateTestConfig("echo test");
         var options = new SandboxSpawnOptions
         {
-            ExecutablePath = @"C:\Windows\System32\cmd.exe",
+            ExecutablePath = TestShell.ExistingExecutablePath,
             Debug = true,
             // LogDir not set
         };
@@ -463,7 +461,7 @@ public class DebugLogFileTests
         var config = TestConfigHelper.CreateTestConfig("echo test");
         var options = new SandboxSpawnOptions
         {
-            ExecutablePath = @"C:\Windows\System32\cmd.exe",
+            ExecutablePath = TestShell.ExistingExecutablePath,
             Debug = true,
             LogDir = @"C:\my-custom-logs",
         };
@@ -482,7 +480,7 @@ public class DebugLogFileTests
         var config = TestConfigHelper.CreateTestConfig("echo test");
         var options = new SandboxSpawnOptions
         {
-            ExecutablePath = @"C:\Windows\System32\cmd.exe",
+            ExecutablePath = TestShell.ExistingExecutablePath,
             Debug = false,
         };
 
@@ -499,8 +497,7 @@ public class PipeStreamingTests
     [Fact]
     public async Task GetStdout_ReturnsCompleteOutput()
     {
-        var conn = ProcessConnection.Spawn("cmd.exe",
-            ["/c", "echo LINE1 && echo LINE2 && echo LINE3"], null);
+        var conn = TestShell.Spawn("echo LINE1 && echo LINE2 && echo LINE3");
 
         await conn.WaitForExitAsync();
 
@@ -515,8 +512,7 @@ public class PipeStreamingTests
     [Fact]
     public async Task GetStderr_ReturnsCompleteErrorOutput()
     {
-        var conn = ProcessConnection.Spawn("cmd.exe",
-            ["/c", "echo ERR1 1>&2 && echo ERR2 1>&2"], null);
+        var conn = TestShell.Spawn("echo ERR1 1>&2 && echo ERR2 1>&2");
 
         await conn.WaitForExitAsync();
 
@@ -613,7 +609,7 @@ public class OutputBufferCapTests
         var spawner = new SandboxSpawner(factory, new ConfigurableFakeProcessFactory());
 
         var config = TestConfigHelper.CreateTestConfig("echo test");
-        var options = new SandboxSpawnOptions { ExecutablePath = @"C:\Windows\System32\cmd.exe" };
+        var options = new SandboxSpawnOptions { ExecutablePath = TestShell.ExistingExecutablePath };
 
         var task = spawner.SpawnSandboxAsync(config, options);
 
@@ -670,7 +666,7 @@ public class PtyCancellationTests
         var spawner = new SandboxSpawner(factory, new ConfigurableFakeProcessFactory());
 
         var config = TestConfigHelper.CreateTestConfig("echo test");
-        var options = new SandboxSpawnOptions { ExecutablePath = @"C:\Windows\System32\cmd.exe" };
+        var options = new SandboxSpawnOptions { ExecutablePath = TestShell.ExistingExecutablePath };
 
         // Get the connection
         var conn = await spawner.SpawnSandboxFromConfigAsync(config, options);
@@ -701,7 +697,7 @@ public class PtyCancellationTests
         var spawner = new SandboxSpawner(factory, new ConfigurableFakeProcessFactory());
 
         var config = TestConfigHelper.CreateTestConfig("echo test");
-        var options = new SandboxSpawnOptions { ExecutablePath = @"C:\Windows\System32\cmd.exe" };
+        var options = new SandboxSpawnOptions { ExecutablePath = TestShell.ExistingExecutablePath };
 
         var conn = await spawner.SpawnSandboxFromConfigAsync(config, options);
 
@@ -729,11 +725,11 @@ public class BinaryResolutionTrustTests
         var config = TestConfigHelper.CreateTestConfig("echo test");
         var options = new SandboxSpawnOptions
         {
-            ExecutablePath = @"C:\Windows\System32\cmd.exe",
+            ExecutablePath = TestShell.ExistingExecutablePath,
         };
 
         var result = SpawnHelper.PrepareSpawn(config, options);
-        Assert.Equal(@"C:\Windows\System32\cmd.exe", result.ExecutablePath);
+        Assert.Equal(TestShell.ExistingExecutablePath, result.ExecutablePath);
     }
 
     [Fact]

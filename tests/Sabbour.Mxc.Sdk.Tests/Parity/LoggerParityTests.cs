@@ -7,6 +7,7 @@ using Xunit;
 
 namespace Sabbour.Mxc.Sdk.Tests.Parity;
 
+[Collection("ConsoleRedirection")]
 public sealed class LoggerParityTests : IDisposable
 {
     private readonly string _tmpDir;

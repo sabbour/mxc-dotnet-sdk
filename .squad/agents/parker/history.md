@@ -18,3 +18,5 @@
 ## 2026-06-08T22:26:04-07:00 — Platform and sandbox parity tests recorded
 
 Scribe recorded Parker's port of upstream platform and sandbox unit tests into the parity suite. Outcome: 110 parity cases and 2 intentional Windows network-validation red flags: processcontainer `allowedHosts`/`blockedHosts` without `allowOutbound` currently builds in C# while upstream TypeScript throws, corroborating fidelity finding C3.
+
+- 2026-06-09T11:04:37-07:00: `examples/` landed with five console samples and the repository received its initial commit (`7f02054`) on `main`.

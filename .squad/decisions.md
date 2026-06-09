@@ -180,13 +180,7 @@ Archived because this entry is older than 30 days and the merged decisions file 
 
 ## Additional Merged Decisions
 
-### 2025-07-14: P6 facade-shape final — 2 remaining gaps fixed
-**By:** Ripley
-
-- Fixed `SpawnSandbox` positional parameter order to match TS: `script, policy, options?, workingDirectory?, containerName?, env?`.
-- Removed over-applied containment marker from non-provision lifecycle methods; only `ProvisionSandboxAsync` keeps containment first, while start/exec/stop/deprovision take `sandboxId` first.
-- Verification: forced Release rebuild clean, 371 tests green.
-- Full dated entry archived to `log/2026-06-08T20-51-43-07-00-decisions-archive-older-than-30-days.md` because it is older than 30 days.
+- 2025-07-14 P6 facade-shape final — 2 remaining gaps fixed: archived to `log/2026-06-08T20-51-43-07-00-decisions-archive-older-than-30-days.md`.
 
 
 ## Session Merged Decisions — 2026-06-08T22-26-04-07-00
@@ -216,3 +210,47 @@ Archived because this entry is older than 30 days and the merged decisions file 
 - Two intentional red flags remain pending coordinator/user fix decision: Windows processcontainer `allowedHosts`/`blockedHosts` without `allowOutbound` currently builds a C# config, while upstream TypeScript throws.
 - Ripley's GPT-5.5 fidelity review is report-only; no production or test code changes were made from that review in this scribe pass. Report outcome: 3 critical, 4 major, 0 minor, and 9 verified intentional adaptations in `files\fidelity-review.md`.
 - Verification handoff: forced Release rebuild had 0 warnings; full suite reported 565 tests, 563 passing, and 2 failing by intentional red flags; the pre-existing 371 tests stayed green.
+
+
+## Session Merged Decisions — 2026-06-09T11-04-37Z
+
+### 2026-06-09T11:04:37-07:00: Examples policy schema pin
+**By:** Scribe (requested by Ahmed Sabbour)
+
+- Examples pin the latest stable policy schema, `0.6.0-alpha` from release `v0.6.1`, not the SDK max-readable / `SUPPORTED_VERSION` value `0.7.0-alpha`.
+- README examples and Version Support prose distinguish the supported minimum (`0.4.0-alpha`), latest stable schema (`0.6.0-alpha`), and max-readable schema (`0.7.0-alpha`).
+- Canonical upstream stable schema documentation link: https://github.com/microsoft/mxc/blob/v0.6.1/docs/sandbox-policy/v1/policy.md#5-sandboxpolicy
+- This supersedes any earlier README guidance that described `0.7.0-alpha` as the current/default schema for examples; `0.7.0-alpha` remains documented as max-readable only.
+
+### 2026-06-09T05-33-12: Documented upstream-parity test redundancy and red flags
+**By:** Ash
+**What:** Documented upstream-parity test redundancy and red flags
+**References:** files/test-redundancy-assessment.md, files/parity-red-flags.md, files/fidelity-review.md#C3
+**Why:** Created recommendation-only documentation for the upstream-parity unit-test port. Existing local tests were categorized conservatively as keep=4, redundant=1, partial-overlap=10; no repository tests or src files were modified. Documented the two intentional SandboxParityTests red flags for network host-filtering validation without allowOutbound, cross-referencing fidelity-review finding C3 and leaving them awaiting Ahmed's fix decision.
+
+### 2026-06-08T23:15:00-07:00: Host filtering parity correction
+**By:** Ash
+
+- `PolicyTransform` and `SandboxFactory` are parallel create-config paths, not a delegation chain.
+- `PolicyTransform.CreateConfigFromPolicy(policy, containment, containerId, platform)` is the canonical pure/testable transform with injected platform.
+- `SandboxFactory.CreateConfigFromPolicy(policy, containment, containerName)` is the public runtime wrapper used by `MxcSdk` and runtime sandbox tests and resolves platform with `RuntimeInformation`.
+- Faithful upstream gate from `sdk/src/sandbox.ts:311-322`: host filtering is allowed without `allowOutbound` only for `wslc`, `seatbelt`, `bubblewrap`, `lxc`, `process` on Linux, and `process` on Darwin. Every other containment/backend with `allowedHosts` or `blockedHosts` and `allowOutbound != true` throws `InvalidOperationException("allowedHosts/blockedHosts require allowOutbound to be true")`.
+- Implemented the gate as a shared internal helper on `PolicyTransform` and used it from both paths; microvm is prevalidated before its early dedicated builder.
+- Verification moved from 565 passed / 1 skipped / 0 failed to 570 passed / 1 skipped / 0 failed with the new tests.
+
+### 2026-06-08T23:00:48-07:00: CI/release setup decisions
+**By:** Parker
+
+- CI uses a small OS matrix: `ubuntu-latest` and `windows-latest`.
+- CI installs the .NET 10 preview SDK with `actions/setup-dotnet@v4`, `dotnet-version: 10.0.x`, and `dotnet-quality: preview`.
+- CI caches NuGet packages with `actions/cache@v4` keyed by project files and central package props, avoiding a dependency on lock files.
+- Release publishing packs only `src/Sabbour.Mxc.Sdk/Sabbour.Mxc.Sdk.csproj`, pushes `./artifacts/*.nupkg` to NuGet.org, and attaches both package and `.snupkg` artifacts to the GitHub Release.
+- Release jobs are guarded to tag refs starting with `refs/tags/v`, including manual `workflow_dispatch` runs.
+- Required repo setup: add `NUGET_API_KEY` as a repository secret before using the release workflow.
+- Verification blocker fixed: SandboxFactory validation now matches host-filtering parity expectation for Windows `process`; integration smoke tests now use an env-gated `FactAttribute` so default CI reports integration tests as skipped.
+
+### 2026-06-09T06-23-06: README prebuilt MXC executor guidance
+**By:** Parker
+**What:** README now documents prebuilt MXC executor as primary integration-test setup
+**References:** README.md, VersionHelper.SupportedVersion=0.7.0-alpha (provided ground truth)
+**Why:** Updated README guidance for tests and native binary discovery: Tier 1 unit tests need no native binary; Tier 2 integration/e2e tests use the prebuilt `microsoft/mxc` `v0.6.1` `mxc-release-binaries.zip`, set `MXC_BIN_DIR` to the directory containing `<arch>\wxc-exec.exe`, set `MXC_INTEGRATION_TESTS=1`, and note the Windows 11 24H2/build 26100+ processcontainer requirement. README No CLI guidance was corrected to say the SDK searches `MXC_BIN_DIR/<arch>/wxc-exec.exe` and not PATH. The earlier schema wording in this inbox item is superseded by the 2026-06-09T11:04:37 examples policy schema pin decision above.

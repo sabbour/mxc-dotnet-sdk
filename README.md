@@ -208,7 +208,7 @@ Check which tier the executor will select on the current host (read-only, no adm
 
 `processcontainer` has three tiers (highest first): `base-container`, `appcontainer-bfs`, `appcontainer-dacl`. The probe reports which one applies.
 
-- **`base-container`** uses an experimental kernel API that ships behind a Windows velocity (controlled-feature-rollout) gate on current builds. When the gate is closed, the executor returns `E_NOTIMPL` even though the API is present. Light it up with [ViVeTool](https://github.com/thebookisclosed/ViVe) (download the build that matches your CPU arch), then **reboot**:
+- **`base-container`** uses an experimental kernel API that ships behind a Windows Feature Store gate on current builds. When the gate is closed, the executor returns `E_NOTIMPL` even though the API is present. Light it up with [ViVeTool](https://github.com/thebookisclosed/ViVe) (download the build that matches your CPU arch), then **reboot**:
 
   ```powershell
   # Run elevated. Use comma-separated IDs — repeated /id: flags are rejected.
@@ -249,7 +249,28 @@ Requires the `nanvixd.exe` daemon, which is **not included** in the public `mxc-
 
 ### wslc
 
-Needs more than a working WSL2 distro — the WSLC (WSL Containers) runtime, reported by the executor as the `WslPackage` component, must be installed. Without it the backend fails its preflight (`WSLC runtime not available. Missing components: WslPackage`). MXC does not pull images at run time; pre-pull the image into the cache first:
+`wslc` runs Linux OCI containers in a dedicated WSL-managed Hyper-V VM. It needs three things beyond a working WSL2 distro.
+
+**1. The WSLC client SDK (`wslcsdk.dll`).** Like the microvm daemon, it is not in the released binary zip. It ships in the upstream nupkg at [`external/wslc-sdk/Microsoft.WSL.Containers.<ver>.nupkg`](https://github.com/microsoft/mxc/tree/main/external/wslc-sdk). A `.nupkg` is a zip — extract it and copy the arch-matching DLL next to `wxc-exec.exe`:
+
+```powershell
+Expand-Archive Microsoft.WSL.Containers.2.8.1.nupkg -DestinationPath wslc-sdk
+Copy-Item "wslc-sdk\runtimes\win-<arch>\wslcsdk.dll" "$env:MXC_BIN_DIR\<arch>\"
+```
+
+The DLL loads only when the wslc backend is invoked — the other backends do not need it.
+
+**2. WSL 2.8.1 or newer.** The container runtime and the SDK surface it depends on only exist in recent WSL. Update WSL (the pre-release channel ships newer builds):
+
+```powershell
+wsl --update --pre-release
+wsl --shutdown
+wsl --version          # need 2.8.1.0 or later
+```
+
+If the published Store and pre-release channels are still below 2.8.1 (they were at 2.7.x at the time of writing), the only route to 2.8.1+ is building [microsoft/WSL](https://github.com/microsoft/WSL) from `master`. Until WSL is new enough, the backend fails its preflight with `WSLC runtime not available. Missing components: WslPackage` even when `wslcsdk.dll` is already in place.
+
+**3. A pre-pulled image.** MXC never pulls at run time — populate the cache first:
 
 ```powershell
 & "$env:MXC_BIN_DIR\<arch>\wxc-exec.exe" --setup-wslc --image alpine:latest

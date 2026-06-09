@@ -222,13 +222,21 @@ public class P1FixTests
     [Fact]
     public void FileLogger_InvalidPath_LogsOnlyMessageNotFullException()
     {
+        // Build a path that cannot be opened on any platform: nest the log file under a
+        // path segment that is an existing FILE, so directory creation fails (ENOTDIR / IOException).
+        // A hardcoded Windows path like "Z:\..." is not portable — on Linux backslashes are valid
+        // filename characters, so such a path would succeed instead of failing.
+        var blockingFile = Path.Combine(Path.GetTempPath(), $"mxc-block-{Guid.NewGuid()}");
+        File.WriteAllText(blockingFile, "x");
+        var invalidPath = Path.Combine(blockingFile, "deep", "nested", "log.txt");
+
         // Capture stderr
         var oldErr = Console.Error;
         using var sw = new StringWriter();
         Console.SetError(sw);
         try
         {
-            using var logger = new FileLogger("Z:\\very\\secret\\path\\deep\\nested\\log.txt");
+            using var logger = new FileLogger(invalidPath);
             var output = sw.ToString();
             // Should contain only the filename
             Assert.Contains("log.txt", output);
@@ -239,6 +247,7 @@ public class P1FixTests
         finally
         {
             Console.SetError(oldErr);
+            if (File.Exists(blockingFile)) File.Delete(blockingFile);
         }
     }
 

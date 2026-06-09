@@ -9,8 +9,16 @@ A .NET 10 SDK for [MXC (Microsoft eXecution Containers)](https://github.com/micr
 
 ## Install
 
+The package is published on NuGet.org: **[Sabbour.Mxc.Sdk](https://www.nuget.org/packages/Sabbour.Mxc.Sdk)**.
+
 ```bash
 dotnet add package Sabbour.Mxc.Sdk
+```
+
+Or add a `PackageReference` to your `.csproj`:
+
+```xml
+<PackageReference Include="Sabbour.Mxc.Sdk" Version="0.6.1" />
 ```
 
 ## Quickstart

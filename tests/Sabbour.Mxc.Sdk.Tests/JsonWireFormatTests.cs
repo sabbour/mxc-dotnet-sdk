@@ -569,5 +569,85 @@ public class JsonWireFormatTests
         Assert.Equal(json, JsonSerializer.Serialize(rt, s_options));
     }
 
+    [Fact]
+    public void ContainerConfig_WithWindowsSandboxExperimental_SerializesCorrectly()
+    {
+        var config = new ContainerConfig
+        {
+            Version = "1.0.0",
+            ContainerId = "ws-test",
+            Containment = ContainmentValue.FromString("windows_sandbox"),
+            Process = new ProcessConfig { CommandLine = "cmd /c echo hi" },
+            Experimental = new ExperimentalConfig
+            {
+                WindowsSandbox = new WindowsSandboxConfig
+                {
+                    IdleTimeoutMs = 60000,
+                    DaemonPipeName = "my-custom-pipe",
+                },
+            },
+        };
+
+        var json = JsonSerializer.Serialize(config, s_options);
+
+        // Verify exact key casing for the windows_sandbox section
+        Assert.Contains("\"windows_sandbox\":{\"idleTimeoutMs\":60000,\"daemonPipeName\":\"my-custom-pipe\"}", json);
+        Assert.Contains("\"containment\":\"windows_sandbox\"", json);
+        // No processContainer
+        Assert.DoesNotContain("processContainer", json);
+
+        // Round-trip
+        var rt = JsonSerializer.Deserialize<ContainerConfig>(json, s_options);
+        Assert.Equal(json, JsonSerializer.Serialize(rt, s_options));
+    }
+
+    [Fact]
+    public void ContainerConfig_WindowsSandbox_AllFieldsSerialize()
+    {
+        var config = new ContainerConfig
+        {
+            Version = "1.0.0",
+            Containment = ContainmentValue.FromString("windows_sandbox"),
+            Process = new ProcessConfig { CommandLine = "test.exe" },
+            Experimental = new ExperimentalConfig
+            {
+                WindowsSandbox = new WindowsSandboxConfig
+                {
+                    IdleTimeout = 5000,
+                    IdleTimeoutMs = 60000,
+                    DaemonPipeName = "pipe1",
+                },
+            },
+        };
+
+        var json = JsonSerializer.Serialize(config, s_options);
+        Assert.Contains("\"idleTimeout\":5000", json);
+        Assert.Contains("\"idleTimeoutMs\":60000", json);
+        Assert.Contains("\"daemonPipeName\":\"pipe1\"", json);
+    }
+
+    [Fact]
+    public void ContainerConfig_WindowsSandbox_OmitsNullFields()
+    {
+        var config = new ContainerConfig
+        {
+            Version = "1.0.0",
+            Containment = ContainmentValue.FromString("windows_sandbox"),
+            Process = new ProcessConfig { CommandLine = "test.exe" },
+            Experimental = new ExperimentalConfig
+            {
+                WindowsSandbox = new WindowsSandboxConfig
+                {
+                    IdleTimeoutMs = 60000,
+                },
+            },
+        };
+
+        var json = JsonSerializer.Serialize(config, s_options);
+        Assert.Contains("\"idleTimeoutMs\":60000", json);
+        Assert.DoesNotContain("\"idleTimeout\"", json);
+        Assert.DoesNotContain("\"daemonPipeName\"", json);
+    }
+
     #endregion
 }

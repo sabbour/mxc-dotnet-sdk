@@ -22,3 +22,15 @@ Scribe recorded Parker's port of upstream platform and sandbox unit tests into t
 - 2026-06-09T11:04:37-07:00: `examples/` landed with five console samples and the repository received its initial commit (`7f02054`) on `main`.
 
 - 2026-06-09T11:30:46-07:00: Added examples 06-09 from upstream docs scenarios; backend probe found only ARM64 Windows AppContainer/processcontainer at schema 0.4.0-alpha fully launches, while 0.6.0-alpha processcontainer fails E_NOTIMPL and other probed backends are unavailable/unsupported/host-absent.
+
+## 2026-06-09T20:52:03Z — windows_sandbox backend implementation
+
+Implemented the windows_sandbox containment backend with full SDK support:
+- Added WindowsSandboxConfig model and ExperimentalConfig.WindowsSandbox field
+- Implemented both builder branches (SandboxFactory.CreateConfigFromPolicy + PolicyTransform.CreateConfigFromPolicy)
+- Extended ContainerConfigConverter.WriteExperimental for windows_sandbox serialization
+- Created 7 new tests: 4 PolicyTransform unit tests, 3 JsonWireFormat tests
+- Created examples/11-windows-sandbox with working Program.cs + csproj
+- Registered example in mxc-dotnet-sdk.slnx and examples/README.md
+
+Outcome: 577 tests pass (570 existing + 7 new), 0 warnings, clean --no-incremental rebuild. Reviewed by Ripley (SOUND), Rai (Yellow advisory on daemonPipeName validation), Brett (docs), and Coordinator (E2E verification).

@@ -61,6 +61,12 @@ public static class SandboxFactory
             return BuildMicrovmConfig(config, policy);
         }
 
+        // Windows Sandbox: delegate to dedicated builder (minimal config, no filesystem/ui/network)
+        if (containment == "windows_sandbox")
+        {
+            return BuildWindowsSandboxConfig(config);
+        }
+
         config = config with
         {
             Filesystem = new FilesystemConfig
@@ -230,6 +236,20 @@ public static class SandboxFactory
         {
             Containment = ContainmentValue.FromString("microvm"),
             Filesystem = fs,
+        };
+    }
+
+    private static ContainerConfig BuildWindowsSandboxConfig(ContainerConfig config)
+    {
+        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            throw new PlatformNotSupportedException("The windows_sandbox backend is only supported on Windows.");
+
+        // Minimal config: version, containerId, lifecycle, process, containment.
+        // No processContainer, filesystem, network, or ui — the executor rejects
+        // configs that include other backend sections alongside windows_sandbox.
+        return config with
+        {
+            Containment = ContainmentValue.FromString("windows_sandbox"),
         };
     }
 

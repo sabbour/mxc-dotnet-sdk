@@ -18,3 +18,15 @@
 ## 2026-06-08T22:26:04-07:00 — GPT-5.5 fidelity review handoff recorded
 
 Scribe recorded Ripley's report-only fidelity review of the C# port against the upstream TypeScript SDK. Output is `files\fidelity-review.md`; findings were 3 critical, 4 major, 0 minor, plus 9 verified intentional adaptations. No code changes were made from the report in this scribe pass.
+
+## 2026-06-09T20:52:03Z — windows_sandbox rubber-duck review
+
+Performed rubber-duck review of Parker's windows_sandbox containment backend implementation. **Verdict: SOUND**.
+
+Confirmed:
+- Both builders (SandboxFactory + PolicyTransform) early-return before stamping other backend sections, matching microvm pattern
+- JSON casing correct (camelCase for experimental.windows_sandbox)
+- Platform-guard split intentional
+- Upstream parity preserved in wire format and behavior
+
+No issues identified. Implementation follows established patterns and maintains fidelity with TypeScript source.

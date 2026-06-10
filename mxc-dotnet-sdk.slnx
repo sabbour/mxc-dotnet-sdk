@@ -30,6 +30,9 @@
   <Folder Name="/examples/10-policy-enforcement/">
     <Project Path="examples/10-policy-enforcement/PolicyEnforcement.csproj" />
   </Folder>
+  <Folder Name="/examples/11-windows-sandbox/">
+    <Project Path="examples/11-windows-sandbox/WindowsSandbox.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/Sabbour.Mxc.Sdk/Sabbour.Mxc.Sdk.csproj" />
   </Folder>

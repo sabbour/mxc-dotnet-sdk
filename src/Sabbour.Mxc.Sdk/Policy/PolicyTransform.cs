@@ -80,7 +80,13 @@ internal static class PolicyTransform
             return BuildMicroVmConfig(config, policy, platform);
         }
 
-        // Filesystem (all non-microvm backends)
+        // Windows Sandbox: delegate to dedicated builder (minimal config, no filesystem/ui/network)
+        if (containment == "windows_sandbox")
+        {
+            return BuildWindowsSandboxConfig(config, platform);
+        }
+
+        // Filesystem (all non-microvm/non-windows_sandbox backends)
         config = config with
         {
             Filesystem = new FilesystemConfig
@@ -302,6 +308,20 @@ internal static class PolicyTransform
         {
             Containment = ContainmentValue.FromString("microvm"),
             Filesystem = filesystem,
+        };
+    }
+
+    private static ContainerConfig BuildWindowsSandboxConfig(ContainerConfig config, string platform)
+    {
+        if (platform != Platforms.Windows)
+            throw new InvalidOperationException("The windows_sandbox backend is only supported on Windows.");
+
+        // Minimal config: version, containerId, lifecycle, process, containment.
+        // No processContainer, filesystem, network, or ui — the executor rejects
+        // configs that include other backend sections alongside windows_sandbox.
+        return config with
+        {
+            Containment = ContainmentValue.FromString("windows_sandbox"),
         };
     }
 

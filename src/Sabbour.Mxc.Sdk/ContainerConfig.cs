@@ -234,6 +234,11 @@ public sealed record ExperimentalConfig
     [JsonPropertyName("seatbelt")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public SeatbeltConfig? Seatbelt { get; init; }
+
+    /// <summary>Windows Sandbox configuration (Windows only).</summary>
+    [JsonPropertyName("windows_sandbox")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public WindowsSandboxConfig? WindowsSandbox { get; init; }
 }
 
 /// <summary>Cross-platform UI configuration in ContainerConfig.</summary>
@@ -359,4 +364,23 @@ public sealed record SeatbeltConfig
     [JsonPropertyName("extraMachLookups")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? ExtraMachLookups { get; init; }
+}
+
+/// <summary>Windows Sandbox configuration (experimental).</summary>
+public sealed record WindowsSandboxConfig
+{
+    /// <summary>Legacy idle timeout in milliseconds.</summary>
+    [JsonPropertyName("idleTimeout")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? IdleTimeout { get; init; }
+
+    /// <summary>Idle timeout in milliseconds (preferred, overrides idleTimeout). Executor default: 300000.</summary>
+    [JsonPropertyName("idleTimeoutMs")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public int? IdleTimeoutMs { get; init; }
+
+    /// <summary>Named pipe for the daemon. Executor default: "wxc-windows-sandbox".</summary>
+    [JsonPropertyName("daemonPipeName")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? DaemonPipeName { get; init; }
 }

@@ -919,4 +919,73 @@ public class PolicyTransformTests
         Assert.Contains("\"release\":\"3.23\"", json);
         Assert.Contains("\"destroyOnExit\":true", json);
     }
+
+    // -----------------------------------------------------------------------
+    // Windows Sandbox backend
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public void HonorMatrix_WindowsSandbox_Basic()
+    {
+        var policy = new SandboxPolicy
+        {
+            Version = "0.5.0",
+            Filesystem = new FilesystemPolicy
+            {
+                ReadwritePaths = ["/data"],
+            },
+        };
+
+        var config = PolicyTransform.CreateConfigFromPolicy(policy, "windows_sandbox", "ws1", PolicyTransform.Platforms.Windows);
+
+        Assert.Equal("windows_sandbox", config.Containment!.Value.Value);
+        Assert.NotNull(config.Process);
+        // No filesystem, ui, network, or processContainer on windows_sandbox
+        Assert.Null(config.Filesystem);
+        Assert.Null(config.Ui);
+        Assert.Null(config.Network);
+        Assert.Null(config.ProcessContainer);
+        Assert.Null(config.Experimental);
+    }
+
+    [Fact]
+    public void HonorMatrix_WindowsSandbox_ThrowsOnNonWindows()
+    {
+        var policy = new SandboxPolicy { Version = "0.5.0" };
+        var ex = Assert.Throws<InvalidOperationException>(() =>
+            PolicyTransform.CreateConfigFromPolicy(policy, "windows_sandbox", "ws1", PolicyTransform.Platforms.Linux));
+        Assert.Contains("only supported on Windows", ex.Message);
+    }
+
+    [Fact]
+    public void GoldenJson_WindowsSandbox_Minimal()
+    {
+        var policy = new SandboxPolicy { Version = "0.5.0" };
+        var config = PolicyTransform.CreateConfigFromPolicy(policy, "windows_sandbox", "ws1", PolicyTransform.Platforms.Windows);
+        var json = Serialize(config);
+
+        const string expected =
+            """{"version":"0.5.0","containerId":"ws1","lifecycle":{"destroyOnExit":true,"preservePolicy":false},"process":{"commandLine":"","timeout":0},"containment":"windows_sandbox"}""";
+
+        Assert.Equal(expected, json);
+    }
+
+    [Fact]
+    public void GoldenJson_WindowsSandbox_NoProcessContainer()
+    {
+        // Critical: the executor REJECTS configs with processContainer alongside windows_sandbox
+        var policy = new SandboxPolicy
+        {
+            Version = "0.5.0",
+            Network = new NetworkPolicy { AllowOutbound = true },
+        };
+        var config = PolicyTransform.CreateConfigFromPolicy(policy, "windows_sandbox", "ws1", PolicyTransform.Platforms.Windows);
+        var json = Serialize(config);
+
+        Assert.DoesNotContain("processContainer", json);
+        Assert.DoesNotContain("filesystem", json);
+        Assert.DoesNotContain("network", json);
+        Assert.DoesNotContain("\"ui\"", json);
+        Assert.Contains("\"containment\":\"windows_sandbox\"", json);
+    }
 }

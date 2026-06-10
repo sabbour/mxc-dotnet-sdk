@@ -281,6 +281,18 @@ internal sealed class ContainerConfigConverter : JsonConverter<ContainerConfig>
             }
             writer.WriteEndObject();
         }
+        if (experimental.WindowsSandbox is not null)
+        {
+            writer.WritePropertyName("windows_sandbox");
+            writer.WriteStartObject();
+            if (experimental.WindowsSandbox.IdleTimeout is not null)
+                writer.WriteNumber("idleTimeout", experimental.WindowsSandbox.IdleTimeout.Value);
+            if (experimental.WindowsSandbox.IdleTimeoutMs is not null)
+                writer.WriteNumber("idleTimeoutMs", experimental.WindowsSandbox.IdleTimeoutMs.Value);
+            if (experimental.WindowsSandbox.DaemonPipeName is not null)
+                writer.WriteString("daemonPipeName", experimental.WindowsSandbox.DaemonPipeName);
+            writer.WriteEndObject();
+        }
         writer.WriteEndObject();
     }
 

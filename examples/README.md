@@ -14,6 +14,7 @@ These are minimal, self-contained console demos for common SDK scenarios. Each p
 | `08-network-restricted` | Allow outbound traffic to a single host only. | Yes |
 | `09-network-proxy` | Route sandbox traffic through a localhost or built-in test proxy. | No |
 | `10-policy-enforcement` | Run one probe (network call + read of an SSH key outside the workspace) under a permissive then a restrictive policy, side by side. | Yes |
+| `11-windows-sandbox` | Run a command in a disposable Windows Sandbox VM (Windows 11+ only, requires elevation). | Yes |
 
 Run one example:
 
@@ -21,4 +22,6 @@ Run one example:
 dotnet run --project examples\01-policy-to-config
 ```
 
-The binary-dependent demos (`03-buffered-spawn`, `05-state-aware-lifecycle`, `06-hello-world`, `08-network-restricted`, and `10-policy-enforcement`) need the MXC executor. Download `mxc-release-binaries.zip` from [microsoft/mxc releases](https://github.com/microsoft/mxc/releases) (v0.6.1), unzip it, and set `MXC_BIN_DIR` to the folder containing `<arch>\wxc-exec.exe`. See the root README's [Running the tests](../README.md#running-the-tests) section for setup details.
+The binary-dependent demos (`03-buffered-spawn`, `05-state-aware-lifecycle`, `06-hello-world`, `08-network-restricted`, `10-policy-enforcement`, and `11-windows-sandbox`) need the MXC executor. Download `mxc-release-binaries.zip` from [microsoft/mxc releases](https://github.com/microsoft/mxc/releases) (v0.6.1), unzip it, and set `MXC_BIN_DIR` to the folder containing `<arch>\wxc-exec.exe`. See the root README's [Running the tests](../README.md#running-the-tests) section for setup details.
+
+`11-windows-sandbox` is Windows 11+ only and must run elevated (Administrator) — the executor probes the Windows Sandbox feature with `dism`, which requires elevation. Running it non-elevated reports a misleading "not enabled" error even when the feature is on.

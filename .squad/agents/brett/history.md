@@ -18,3 +18,14 @@
 ## 2026-06-08T22:26:04-07:00 — Core parity tests recorded
 
 Scribe recorded Brett's port of upstream errors, logger, policy, state-aware, and state-aware-types unit tests into the parity suite. Outcome: 70 parity cases, 0 red flags, and test-only adaptations for C# type assertions, cancellation-token behavior, and RuntimeInformation-bound policy checks.
+
+## 2026-06-09T20:52:03Z — windows_sandbox documentation
+
+Updated README.md with windows_sandbox containment backend documentation:
+- Described windows_sandbox backend and its Windows-specific nature
+- Documented elevation requirement (Administrator privileges needed)
+- Added reboot requirement note after enabling Windows Sandbox feature
+- Documented experimental.windows_sandbox configuration schema (idleTimeoutMs, daemonPipeName) with defaults
+- Cross-referenced examples/11-windows-sandbox for working code sample
+
+Documentation verified accurate by Coordinator's end-to-end testing on Windows 11 ARM64 build 26200.

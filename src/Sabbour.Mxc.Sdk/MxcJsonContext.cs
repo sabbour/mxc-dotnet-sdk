@@ -31,6 +31,7 @@ namespace Sabbour.Mxc.Sdk;
 [JsonSerializable(typeof(PortMapping))]
 [JsonSerializable(typeof(LxcConfig))]
 [JsonSerializable(typeof(SeatbeltConfig))]
+[JsonSerializable(typeof(WindowsSandboxConfig))]
 [JsonSerializable(typeof(UiCapabilitySupport))]
 [JsonSerializable(typeof(FilesystemPolicy))]
 [JsonSerializable(typeof(NetworkPolicy))]

@@ -272,3 +272,54 @@ Archived because this entry is older than 30 days and the merged decisions file 
 **What:** Wire proxy-containment rejection into SandboxFactory.ApplyNetworkConfig via a shared PolicyTransform validator (parity fix, user-approved)
 **References:** Ash, SandboxFactory.cs:174-202, PolicyTransform.cs:141-157, SandboxParityTests.cs:249-262,627-638, decision #4
 **Why:** Restoring ubuntu-latest CI exposed two intentional RED-FLAG Linux parity tests (SandboxParityTests.CreateConfigFromPolicy_Linux_RejectsProxyForExplicitLxcContainment, BuildSandboxPayload_Linux_RejectsProxyForNonBubblewrapContainments). Root cause: PolicyTransform.BuildNetworkConfig throws for proxy + non-bubblewrap Linux containment, but SandboxFactory.ApplyNetworkConfig (the path these tests use) never replicated that check. User approved fixing the SDK rather than weakening/skipping the tests. Fix mirrors the already-approved host-filtering parity fix: extract proxy-rejection into a single shared PolicyTransform validator, call it from both BuildNetworkConfig and SandboxFactory.ApplyNetworkConfig. Owner: Ash.
+
+## Session Merged Decisions — 2026-06-09T20-52-03Z
+
+### 2026-06-09T20:52:03: windows_sandbox containment backend implementation (from parker-windows-sandbox.md)
+
+
+### 2026-06-09T20:52:03: windows_sandbox SDK implementation completed
+**By:** Squad (Parker, Ripley, Rai, Brett, Coordinator)
+
+**Summary:** The windows_sandbox containment backend is now fully implemented in the .NET SDK with both builder paths (SandboxFactory.CreateConfigFromPolicy and MxcSdk.BuildSandboxPayload), custom serialization, comprehensive test coverage, documentation, and end-to-end verification.
+
+**Key decisions:**
+1. **Dual builder support** — windows_sandbox is selectable via BOTH MxcSdk.CreateConfigFromPolicy and MxcSdk.BuildSandboxPayload, routing through SandboxFactory.CreateConfigFromPolicy. Minimal valid config requires only process + containment:"windows_sandbox".
+2. **Wire schema** — experimental.windows_sandbox with camelCase: idleTimeout (legacy) / idleTimeoutMs (default 300000) / daemonPipeName (default "wxc-windows-sandbox").
+3. **DaemonPipeName validation deferred** — SDK-level validation of daemonPipeName intentionally DEFERRED to preserve 1:1 upstream parity (Rai Yellow advisory). The executor/OS is the trust boundary. Logged as future hardening candidate.
+4. **Elevation requirement** — windows_sandbox requires running the spawning process ELEVATED (Administrator). Verified working on Windows 11 ARM64 build 26200. Non-elevated fails with misleading "not enabled" message because the executor's DISM probe (dism /online /get-featureinfo) needs admin and returns Error 740.
+5. **Interactive GUI window** — Windows Sandbox always renders the interactive WindowsSandbox.exe GUI window when the daemon boots the VM; there is no headless/hide option in the .wsb schema. User code still runs headlessly via daemon IPC. Window is minimizable but not suppressible.
+6. **Implementation details** — Added WindowsSandboxConfig model + ExperimentalConfig.WindowsSandbox field, both builder branches (SandboxFactory.cs + PolicyTransform.cs), custom serialization (ContainerConfigConverter.WriteExperimental, MxcJsonContext registration), 7 new tests (4 PolicyTransform, 3 JsonWireFormat), example project (examples/11-windows-sandbox), and README documentation.
+7. **Test coverage** — 577 tests pass (570 unit + 7 new windows_sandbox), 0 warnings, full --no-incremental rebuild clean.
+8. **End-to-end verification** — Elevated run on Windows 11 ARM64 build 26200 confirmed: ExitCode 0, real in-VM stdout captured, ~31s cold boot time, daemon IPC functional.
+
+**Why:** windows_sandbox was marked "not yet supported" in the .NET SDK; this implementation brings full parity with the TypeScript source, enabling Windows Sandbox containment for .NET users. Intentional deviations (no SDK-level daemonPipeName validation, elevation requirement documentation) preserve upstream fidelity while documenting Windows-specific constraints.
+
+
+## Session Merged Decisions — 2026-06-09T20-52-03Z
+
+### 2026-06-09T20:52:03: windows_sandbox containment backend implementation
+**By:** Squad (Parker, Ripley, Rai, Brett, Coordinator)
+
+**Summary:** The windows_sandbox containment backend is now fully implemented in the .NET SDK with both builder paths, custom serialization, comprehensive test coverage, documentation, and end-to-end verification.
+
+**Key decisions:**
+1. **Dual builder support** — windows_sandbox is selectable via BOTH MxcSdk.CreateConfigFromPolicy and MxcSdk.BuildSandboxPayload, routing through SandboxFactory.CreateConfigFromPolicy. Minimal valid config requires only process + containment:"windows_sandbox".
+2. **Wire schema** — experimental.windows_sandbox with camelCase: idleTimeout (legacy) / idleTimeoutMs (default 300000) / daemonPipeName (default "wxc-windows-sandbox").
+3. **DaemonPipeName validation deferred** — SDK-level validation of daemonPipeName intentionally DEFERRED to preserve 1:1 upstream parity (Rai Yellow advisory). The executor/OS is the trust boundary. Logged as future hardening candidate.
+4. **Elevation requirement** — windows_sandbox requires running the spawning process ELEVATED (Administrator). Verified working on Windows 11 ARM64 build 26200. Non-elevated fails with misleading "not enabled" message because the executor's DISM probe needs admin (Error 740).
+5. **Interactive GUI window** — Windows Sandbox always renders the interactive WindowsSandbox.exe GUI window when the daemon boots the VM; there is no headless/hide option in the .wsb schema. User code runs headlessly via daemon IPC. Window is minimizable but not suppressible.
+6. **Implementation details** — Added WindowsSandboxConfig model + ExperimentalConfig.WindowsSandbox field, both builder branches (SandboxFactory.cs + PolicyTransform.cs), custom serialization (ContainerConfigConverter.WriteExperimental, MxcJsonContext registration), 7 new tests (4 PolicyTransform, 3 JsonWireFormat), example project (examples/11-windows-sandbox), and README documentation.
+7. **Test coverage** — 577 tests pass (570 unit + 7 new windows_sandbox), 0 warnings, full --no-incremental rebuild clean.
+8. **End-to-end verification** — Elevated run on Windows 11 ARM64 build 26200 confirmed: ExitCode 0, real in-VM stdout captured, ~31s cold boot time, daemon IPC functional.
+
+**Why:** windows_sandbox was marked "not yet supported" in the .NET SDK; this implementation brings full parity with the TypeScript source, enabling Windows Sandbox containment for .NET users. Intentional deviations (no SDK-level daemonPipeName validation, elevation requirement documentation) preserve upstream fidelity while documenting Windows-specific constraints.
+
+**Implementation scope:**
+- Parker (Systems Dev): WindowsSandboxConfig model, both builders, serialization, 7 tests
+- Ripley (Lead): Rubber-duck review, verdict SOUND
+- Rai (RAI Reviewer): RAI review, verdict Yellow advisory (daemonPipeName validation deferred)
+- Brett (Core Dev): README documentation update
+- Parker (Systems Dev): Example project examples/11-windows-sandbox
+- Coordinator: Independent verification, end-to-end testing, root cause analysis for elevation requirement
+

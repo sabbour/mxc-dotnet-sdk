@@ -78,7 +78,7 @@ dotnet add package Sabbour.Mxc.Sdk
 Or add a `PackageReference` to your `.csproj`:
 
 ```xml
-<PackageReference Include="Sabbour.Mxc.Sdk" Version="0.6.1" />
+<PackageReference Include="Sabbour.Mxc.Sdk" Version="0.1.1" />
 ```
 
 ## Enabling isolation backends (host setup)
@@ -130,13 +130,17 @@ Enable-WindowsOptionalFeature -Online -FeatureName Containers-DisposableClientVM
 
 It also needs hardware virtualization enabled in firmware and Python on the host. On Windows builds 26100 and newer there is a documented boot regression (zombie VM processes) that can keep the sandbox VM from starting even when the feature is enabled.
 
-This backend is not selectable through `CreateConfigFromPolicy` (matching upstream — its `createConfigFromPolicy` has no branch for it either). Reach it with a prebuilt config plus the experimental flag:
+**Run the spawning process elevated (as Administrator).** Before booting the VM, the executor confirms the feature is on with `dism /online /get-featureinfo /featurename:Containers-DisposableClientVM`, which requires admin. Without elevation that call fails with `Error: 740` (elevated permissions required) and the executor reports `Windows Sandbox is not enabled. ... and reboot.` even when the feature is enabled — a non-elevated process can't see the feature state. Verified working on Windows 11 arm64 (build 26200): elevated, a `cmd /c echo` ran to completion inside the VM with exit code 0 in ~30s.
+
+This backend **is now implemented** and selectable through both `CreateConfigFromPolicy` and `BuildSandboxPayload` on Windows (this SDK implements it ahead of upstream — the TypeScript `createConfigFromPolicy` still throws "not yet supported"). The SDK generates a minimal config (version, containerId, lifecycle, process, containment only — no filesystem/network/ui sections). Spawning still requires `Experimental = true`:
 
 ```csharp
 var config = MxcSdk.BuildSandboxPayload("echo hi", policy, containment: "windows_sandbox");
 using var conn = MxcSdk.SpawnSandboxProcessFromConfig(config,
     new SandboxSpawnOptions { Experimental = true, UsePty = false });
 ```
+
+For hand-built configs, optional tuning is available via `experimental.windows_sandbox` with `idleTimeoutMs` (executor default 300000) and `daemonPipeName` (executor default "wxc-windows-sandbox"). The policy-based builders do not set these fields — executor defaults apply.
 
 #### microvm (NanVix)
 
@@ -156,7 +160,7 @@ On an x86_64 host, warm the published snapshot once before first use (pulls the 
 & "$env:MXC_BIN_DIR\x64\wxc-exec.exe" --setup-hyperlight
 ```
 
-Like `windows_sandbox`, `hyperlight` is reached through a prebuilt config with `Experimental = true`, not through `CreateConfigFromPolicy`.
+Unlike `windows_sandbox` (which **is** selectable through `CreateConfigFromPolicy`), `hyperlight` is not — reach it with a prebuilt config and `Experimental = true`.
 
 ### WSL / Linux host
 

@@ -4,7 +4,7 @@
     <PackageId>Sabbour.Mxc.Sdk</PackageId>
     <RootNamespace>Sabbour.Mxc.Sdk</RootNamespace>
     <AssemblyName>Sabbour.Mxc.Sdk</AssemblyName>
-    <Version>0.1.2-local</Version>
+    <Version>0.1.2</Version>
     <Description>.NET 10 SDK for MXC (Microsoft eXecution Containers) — a faithful port of @microsoft/mxc-sdk.</Description>
     <Authors>Ahmed Sabbour</Authors>
     <PackageLicenseExpression>MIT</PackageLicenseExpression>

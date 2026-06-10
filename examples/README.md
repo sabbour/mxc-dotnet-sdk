@@ -8,7 +8,7 @@ These are minimal, self-contained console demos for common SDK scenarios. Each p
 | `02-platform-support` | Probe sandbox backend support on the current host. | No |
 | `03-buffered-spawn` | Run a command with buffered stdout/stderr. | Yes |
 | `04-network-policy` | Show host-filtering validation for allowed hosts. | No |
-| `05-state-aware-lifecycle` | Provision, start, exec, stop, and deprovision a state-aware sandbox. | Yes |
+| `05-state-aware-lifecycle` | Provision and start one state-aware sandbox, run multiple commands in the persistent session, then stop and deprovision it. | Yes |
 | `06-hello-world` | Run a command in a sandbox with a named container. | Yes |
 | `07-filesystem-access` | Grant, restrict, and deny filesystem paths in a policy. | No |
 | `08-network-restricted` | Allow outbound traffic to a single host only. | Yes |

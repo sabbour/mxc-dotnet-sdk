@@ -64,7 +64,15 @@ public enum ContainmentBackend
 
     /// <summary>Linux Bubblewrap (bwrap) namespace backend.</summary>
     [JsonStringEnumMemberName("bubblewrap")]
-    Bubblewrap
+    Bubblewrap,
+
+    /// <summary>WSL2 + bubblewrap sandboxing (Linux tools inside WSL2, from Windows host).</summary>
+    [JsonStringEnumMemberName("wsl_bubblewrap")]
+    WslBubblewrap,
+
+    /// <summary>WSL2 + unshare namespace isolation (Linux tools inside WSL2, from Windows host).</summary>
+    [JsonStringEnumMemberName("wsl_unshare")]
+    WslUnshare
 }
 
 /// <summary>
@@ -294,5 +302,13 @@ public enum SandboxingMethod
 
     /// <summary>Linux Bubblewrap namespace backend.</summary>
     [JsonStringEnumMemberName("bubblewrap")]
-    Bubblewrap
+    Bubblewrap,
+
+    /// <summary>WSL2 + bubblewrap sandboxing (Linux tools inside WSL2, from Windows host).</summary>
+    [JsonStringEnumMemberName("wsl_bubblewrap")]
+    WslBubblewrap,
+
+    /// <summary>WSL2 + unshare namespace isolation (Linux tools inside WSL2, from Windows host).</summary>
+    [JsonStringEnumMemberName("wsl_unshare")]
+    WslUnshare
 }

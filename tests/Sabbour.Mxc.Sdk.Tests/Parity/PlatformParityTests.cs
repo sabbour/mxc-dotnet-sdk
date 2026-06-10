@@ -414,5 +414,9 @@ public sealed class PlatformParityTests
         public bool FileExists(string path) => false;
 
         public string? QueryRegistry(string key, string valueName) => null;
+
+        public bool IsToolAvailableInWsl2(string toolName) => false;
+
+        public ProcessResult RunWsl2Command(string bashCommand, int timeoutMs = 10000) => new(1, "", "");
     }
 }

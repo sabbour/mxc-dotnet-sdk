@@ -448,6 +448,31 @@ internal sealed class FakePlatformProbeRunner : IPlatformProbeRunner
         return _registry.TryGetValue(RegistryKey(key, valueName), out var value) ? value : null;
     }
 
+    private readonly Dictionary<string, bool> _wsl2Tools = new(StringComparer.OrdinalIgnoreCase);
+    private ProcessResult? _wsl2CommandResult;
+
+    public bool IsToolAvailableInWsl2(string toolName)
+    {
+        return _wsl2Tools.TryGetValue(toolName, out var available) && available;
+    }
+
+    public ProcessResult RunWsl2Command(string bashCommand, int timeoutMs = 10000)
+    {
+        return _wsl2CommandResult ?? new ProcessResult(1, "", "");
+    }
+
+    public FakePlatformProbeRunner WithWsl2ToolAvailable(string toolName, bool available = true)
+    {
+        _wsl2Tools[toolName] = available;
+        return this;
+    }
+
+    public FakePlatformProbeRunner WithWsl2CommandResult(ProcessResult result)
+    {
+        _wsl2CommandResult = result;
+        return this;
+    }
+
     public FakePlatformProbeRunner WithProbeStdout(string stdout)
     {
         ProbeStdout = stdout;

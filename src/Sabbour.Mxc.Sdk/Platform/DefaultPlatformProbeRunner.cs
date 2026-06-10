@@ -130,6 +130,26 @@ internal sealed class DefaultPlatformProbeRunner : IPlatformProbeRunner
         }
     }
 
+    /// <inheritdoc />
+    public bool IsToolAvailableInWsl2(string toolName)
+    {
+        try
+        {
+            var result = RunWsl2Command($"command -v {toolName}", timeoutMs: 8000);
+            return result.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <inheritdoc />
+    public ProcessResult RunWsl2Command(string bashCommand, int timeoutMs = 10000)
+    {
+        return RunCommand("wsl.exe", ["--", "bash", "-c", bashCommand], timeoutMs);
+    }
+
     /// <summary>
     /// Find the wxc-exec executable.
     ///

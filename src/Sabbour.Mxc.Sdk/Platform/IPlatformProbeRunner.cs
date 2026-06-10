@@ -48,4 +48,20 @@ internal interface IPlatformProbeRunner
     /// <param name="valueName">Name of the value to query.</param>
     /// <returns>The registry value as a string, or null if not found.</returns>
     string? QueryRegistry(string key, string valueName);
+
+    /// <summary>
+    /// Checks whether a tool is available inside WSL2 by running
+    /// <c>wsl.exe -- bash -c "command -v &lt;tool&gt;"</c>.
+    /// Returns true if the command exits with code 0.
+    /// </summary>
+    /// <param name="toolName">The tool to probe (e.g. "bwrap", "unshare").</param>
+    bool IsToolAvailableInWsl2(string toolName);
+
+    /// <summary>
+    /// Runs a bash command inside WSL2 via <c>wsl.exe -- bash -c &lt;bashCommand&gt;</c>
+    /// and returns the structured result.
+    /// </summary>
+    /// <param name="bashCommand">The bash command string to execute.</param>
+    /// <param name="timeoutMs">Maximum wait time in milliseconds.</param>
+    ProcessResult RunWsl2Command(string bashCommand, int timeoutMs = 10000);
 }

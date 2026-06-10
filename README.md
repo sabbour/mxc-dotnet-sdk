@@ -207,6 +207,72 @@ The provision → start → exec (many) → stop → deprovision lifecycle (`exa
 
 > **Verified on** Windows 11 ARM64 (Snapdragon X, build 26200) and WSL Ubuntu-24.04 (aarch64), against the v0.6.1 executor binaries. Backend availability and requirements are owned upstream and may change — treat the [microsoft/mxc SDK README](https://github.com/microsoft/mxc/blob/main/sdk/README.md) as the source of truth.
 
+## WSL2 sandboxing (Windows host, Linux isolation)
+
+When to use: you are on a Windows host and want real Linux namespace isolation (filesystem confinement, private PID namespace) without a full VM, and WSL2 is available. This path does not go through `wxc-exec` at all — it invokes `wsl.exe` directly and runs `bwrap` or `unshare` inside the default WSL2 distribution.
+
+### Prerequisites
+
+1. WSL2 installed and a Linux distribution set as default (Ubuntu 24.04 recommended).
+2. bubblewrap available inside WSL2:
+
+   ```bash
+   sudo apt install bubblewrap
+   ```
+
+### Detection
+
+```csharp
+var wsl2Support = MxcSdk.GetWsl2PlatformSupport();
+// wsl2Support.IsSupported     — true when WSL2 is available AND at least one tool found
+// wsl2Support.AvailableMethods — subset of { WslBubblewrap, WslUnshare }
+```
+
+### Spawning
+
+```csharp
+using Sabbour.Mxc.Sdk;
+using Sabbour.Mxc.Sdk.Sandbox;
+
+var wsl2Support = MxcSdk.GetWsl2PlatformSupport();
+if (wsl2Support.IsSupported && wsl2Support.AvailableMethods.Contains(ContainmentBackend.WslBubblewrap))
+{
+    var policy = new SandboxPolicy
+    {
+        Version = "0.6.0-alpha",
+        Filesystem = new FilesystemPolicy { ReadwritePaths = [@"C:\my\workspace"] },
+    };
+
+    var result = await MxcSdk.SpawnWsl2SandboxAsync(
+        "echo hello from sandbox",
+        policy,
+        workingDirectory: @"C:\my\workspace");
+
+    Console.WriteLine(result.Stdout);   // hello from sandbox
+    Console.WriteLine(result.ExitCode); // 0
+}
+```
+
+### How it works
+
+- `workingDirectory` is mapped from Windows format (`C:\...`) to the WSL2 mount path (`/mnt/c/...`).
+- The script is base64-encoded and decoded inside WSL2 via `printf %s '<b64>' | base64 -d` to prevent shell injection.
+- **WslBubblewrap** (recommended): confines the filesystem to the workspace directory (bind-mounted read-write), mounts `/usr` and `/etc` read-only, creates `/bin`, `/lib`, `/sbin` symlinks (Ubuntu ARM64 layout), and isolates the PID namespace via `--unshare-pid`. Verified on Ubuntu 24.04 aarch64 WSL2 (bwrap 0.9.0).
+- **WslUnshare**: user/mount/PID namespace isolation via `unshare --user --map-root-user --mount --pid --fork`. Does not confine the filesystem to the workspace.
+- Both backends do NOT enforce a network allowlist — outbound network is unrestricted.
+
+### Upgrade path to Wslc
+
+When WSL 2.8.1+ ships as a public Windows Update / winget release (currently only tagged on GitHub as of June 2026), this path can be replaced with `MxcSdk.SpawnSandboxAsync` using `ContainmentBackend.Wslc`. That path goes fully through `wxc-exec` using the Wslc SDK (`wslcsdk.dll`) and provides OCI container isolation without a separate bwrap invocation. Detect availability with:
+
+```csharp
+var support = MxcSdk.GetPlatformSupport();
+if (support.AvailableMethods.Contains(ContainmentBackend.Wslc))
+{
+    // Use SpawnSandboxAsync with containment: "wslc" instead
+}
+```
+
 ## Quickstart
 
 Start with a policy and turn it into the backend config that the native executor understands:

@@ -416,4 +416,65 @@ public static class MxcSdk
     {
         return StateAwareSandboxes.IsolationSession.DeprovisionSandboxAsync(sandboxId, config, options, cancellationToken);
     }
+
+    // -----------------------------------------------------------------------
+    // WSL2 sandboxing
+    // -----------------------------------------------------------------------
+
+    /// <summary>
+    /// Probes the Windows host for WSL2 availability and which Linux isolation tools
+    /// (bwrap, unshare) are present inside the default WSL2 distribution.
+    /// Results are NOT cached — each call re-probes (WSL2 tools may be installed at runtime).
+    /// </summary>
+    /// <returns>
+    /// A <see cref="PlatformSupport"/> whose <c>AvailableMethods</c> contains
+    /// <see cref="ContainmentBackend.WslBubblewrap"/> and/or
+    /// <see cref="ContainmentBackend.WslUnshare"/> as available.
+    /// <c>IsSupported</c> is false when wsl.exe is not found or no tools are available.
+    /// </returns>
+    public static PlatformSupport GetWsl2PlatformSupport()
+    {
+        return s_prober.GetWsl2PlatformSupport();
+    }
+
+    /// <summary>
+    /// Spawns a sandboxed process inside WSL2 using bubblewrap or unshare and waits for exit.
+    /// The workspace path (Windows format) is mapped to its WSL2 /mnt/ equivalent automatically.
+    /// The command is base64-encoded before passing to bash to prevent shell injection.
+    /// </summary>
+    /// <param name="script">Shell command to run inside the sandbox.</param>
+    /// <param name="policy">Sandbox policy (currently unused for WSL2 path; reserved for future enforcement).</param>
+    /// <param name="options">Spawn options (TimeoutMs respected; other fields unused for WSL2 path).</param>
+    /// <param name="workingDirectory">
+    /// Windows absolute path to the working directory (e.g. <c>C:\my\workspace</c>).
+    /// Required — the sandbox is chdir'd into this directory.
+    /// </param>
+    /// <param name="backend">
+    /// WSL2 backend to use: <see cref="ContainmentBackend.WslBubblewrap"/> (default, recommended)
+    /// or <see cref="ContainmentBackend.WslUnshare"/>.
+    /// </param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    /// <returns>A <see cref="SandboxProcessResult"/> with stdout, stderr, and exit code.</returns>
+    public static Task<SandboxProcessResult> SpawnWsl2SandboxAsync(
+        string script,
+        SandboxPolicy policy,
+        SandboxSpawnOptions? options = null,
+        string? workingDirectory = null,
+        ContainmentBackend backend = ContainmentBackend.WslBubblewrap,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrEmpty(workingDirectory))
+            throw new ArgumentException("workingDirectory is required for WSL2 sandbox spawning.", nameof(workingDirectory));
+
+        if (backend != ContainmentBackend.WslBubblewrap && backend != ContainmentBackend.WslUnshare)
+            throw new ArgumentException(
+                $"backend must be WslBubblewrap or WslUnshare, got: {backend}.", nameof(backend));
+
+        var timeoutMs = 0;
+        // SandboxSpawnOptions does not currently expose a TimeoutMs; left as 0 (no timeout).
+        _ = options;
+        _ = policy;
+
+        return Wsl2Spawner.SpawnAsync(script, workingDirectory, backend, timeoutMs, cancellationToken);
+    }
 }

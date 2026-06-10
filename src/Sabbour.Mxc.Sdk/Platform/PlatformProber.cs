@@ -158,6 +158,7 @@ public sealed class PlatformProber
     /// <summary>
     /// Windows: processcontainer is always available; conditionally add windows_sandbox
     /// and isolation_session; run wxc-exec --probe for isolation tier + UI capabilities.
+    /// Also merges WSL2-based backends when WSL2 is available.
     /// </summary>
     private PlatformSupport ComputeWindowsSupport()
     {
@@ -168,6 +169,14 @@ public sealed class PlatformProber
 
         if (IsIsoSessionSupported())
             methods.Add(ContainmentBackend.IsolationSession);
+
+        // Merge WSL2 backends when WSL2 is available.
+        var wsl2Support = GetWsl2PlatformSupport();
+        if (wsl2Support.IsSupported)
+        {
+            foreach (var method in wsl2Support.AvailableMethods)
+                methods.Add(method);
+        }
 
         var support = new PlatformSupport
         {
@@ -248,6 +257,82 @@ public sealed class PlatformProber
     internal bool IsSeatbeltAvailable()
     {
         return _probeRunner.FileExists("/usr/bin/sandbox-exec");
+    }
+
+    /// <summary>
+    /// Check whether wsl.exe is present and responds successfully.
+    /// Runs <c>wsl.exe --status</c> with a 5-second timeout.
+    /// </summary>
+    internal bool IsWsl2Available()
+    {
+        try
+        {
+            var result = _probeRunner.RunCommand("wsl.exe", ["--status"], timeoutMs: 5000);
+            return result.ExitCode == 0;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Check whether bubblewrap (bwrap) is available inside WSL2.
+    /// </summary>
+    internal bool IsWsl2BwrapAvailable()
+    {
+        return _probeRunner.IsToolAvailableInWsl2("bwrap");
+    }
+
+    /// <summary>
+    /// Check whether unshare is available inside WSL2.
+    /// </summary>
+    internal bool IsWsl2UnshareAvailable()
+    {
+        return _probeRunner.IsToolAvailableInWsl2("unshare");
+    }
+
+    /// <summary>
+    /// Probes for WSL2 and returns a <see cref="PlatformSupport"/> describing which
+    /// WSL2-backed isolation tools (<see cref="ContainmentBackend.WslBubblewrap"/>,
+    /// <see cref="ContainmentBackend.WslUnshare"/>) are available on the Windows host.
+    /// Returns <c>IsSupported = false</c> when wsl.exe is not found or no tools are present.
+    /// </summary>
+    public PlatformSupport GetWsl2PlatformSupport()
+    {
+        if (!IsWsl2Available())
+        {
+            return new PlatformSupport
+            {
+                IsSupported = false,
+                Reason = "wsl.exe not found or WSL2 is not available",
+                AvailableMethods = []
+            };
+        }
+
+        var methods = new List<ContainmentBackend>();
+
+        if (IsWsl2BwrapAvailable())
+            methods.Add(ContainmentBackend.WslBubblewrap);
+
+        if (IsWsl2UnshareAvailable())
+            methods.Add(ContainmentBackend.WslUnshare);
+
+        if (methods.Count == 0)
+        {
+            return new PlatformSupport
+            {
+                IsSupported = false,
+                Reason = "WSL2 is available but neither bwrap nor unshare was found inside WSL2",
+                AvailableMethods = []
+            };
+        }
+
+        return new PlatformSupport
+        {
+            IsSupported = true,
+            AvailableMethods = methods
+        };
     }
 
     /// <summary>

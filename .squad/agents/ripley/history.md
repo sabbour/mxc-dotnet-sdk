@@ -30,3 +30,5 @@ Confirmed:
 - Upstream parity preserved in wire format and behavior
 
 No issues identified. Implementation follows established patterns and maintains fidelity with TypeScript source.
+
+- 2026-06-09T21:35:19-07:00 — Verified .NET SDK parity baseline: upstream v0.6.1 / `161598fd` is ALIGNED-WITH-SUPERSET with only intentional additive supersets (`windows_sandbox`, `UiCapabilities --probe`, pipe-mode convenience).

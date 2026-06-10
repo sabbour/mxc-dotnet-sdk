@@ -323,3 +323,19 @@ Archived because this entry is older than 30 days and the merged decisions file 
 - Parker (Systems Dev): Example project examples/11-windows-sandbox
 - Coordinator: Independent verification, end-to-end testing, root cause analysis for elevation requirement
 
+
+### 2026-06-09T21:35:19-07:00: SDK parity verified against upstream v0.6.1 (ALIGNED-WITH-SUPERSET)
+**By:** Scribe (merged Ripley parity audit)
+
+**Decision:** The .NET SDK parity baseline is canonical at upstream `microsoft/mxc` TypeScript SDK v0.6.1 commit `161598fd08a4fdd030f461de19af23ce4a310b41`: verdict **ALIGNED-WITH-SUPERSET**.
+
+**Finding:** Zero genuine divergences were found. The .NET SDK is 1:1 aligned for observable behavior and JSON wire format sent to `wxc-exec`; idiomatic .NET differences (PascalCase, Async/Task, records, CancellationToken) do not alter the wire contract.
+
+**Intentional additive supersets:**
+1. `windows_sandbox` containment: upstream declares the backend but its `createConfigFromPolicy` path throws / does not build a config; .NET implements `PolicyTransform.BuildWindowsSandboxConfig` for the example 11 feature.
+2. `PlatformSupport.UiCapabilities` reads an extra `--probe` field that upstream does not consume.
+3. `SpawnSandboxProcessFromConfig` provides pipe-mode convenience equivalent to upstream overload behavior with `usePty: false`.
+
+**Evidence:** Ripley reviewed upstream `sdk/src/*.ts` at the pinned commit plus local `src/Sabbour.Mxc.Sdk/**/*.cs`; `dotnet build -c Release --no-incremental -t:Rebuild` completed with 0 warnings / 0 errors.
+
+**Source inbox:** `decisions/inbox/ripley-parity-verified-v0.6.1.md`.

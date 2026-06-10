@@ -29,3 +29,5 @@ Updated README.md with windows_sandbox containment backend documentation:
 - Cross-referenced examples/11-windows-sandbox for working code sample
 
 Documentation verified accurate by Coordinator's end-to-end testing on Windows 11 ARM64 build 26200.
+
+- 2026-06-09T21:35:19-07:00 — Verified .NET SDK parity baseline: upstream v0.6.1 / `161598fd` is ALIGNED-WITH-SUPERSET with only intentional additive supersets (`windows_sandbox`, `UiCapabilities --probe`, pipe-mode convenience).

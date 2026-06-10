@@ -183,6 +183,30 @@ On WSL2 / Linux the SDK uses the Linux executor (`lxc-exec`). Two things light i
 
 The `process`, `lxc`, and `bubblewrap` containments target this Linux executor. The Windows-only backends (`windows_sandbox`, `microvm`, `hyperlight`) are not reachable from WSL — `microvm`/`hyperlight` need an x86_64 host with KVM, which is not exposed inside this WSL2 VM.
 
+## Backend availability and limitations
+
+This SDK is a faithful port: it builds the policy/config and hands off to the native MXC executor (`wxc-exec` on Windows, `lxc-exec` on Linux). Which backends actually run is decided by the executor and the host OS — not by this SDK. The authoritative requirements live upstream in [microsoft/mxc](https://github.com/microsoft/mxc/blob/main/sdk/README.md#choosing-a-backend). Here is what we observed while building and testing this port:
+
+| Backend | Containment | What we saw | Requirement |
+| --- | --- | --- | --- |
+| `processcontainer` | `process` (default, Windows) | `base-container` tier returns `E_NOTIMPL` on a stock build | Enable the velocity feature keys `61389575,61155944` with [ViVeTool](https://github.com/thebookisclosed/ViVe) + reboot (see [host setup](#enabling-isolation-backends-host-setup)). **Not** an Insider requirement. Schema `0.4.0-alpha` uses the AppContainer tier and runs without those keys. |
+| `windows_sandbox` | `vm` | Runs, but only elevated | Windows Sandbox optional feature + reboot, and an elevated process (see [host setup](#enabling-isolation-backends-host-setup)). Pass `Experimental = true`. First boot ~30s. |
+| `isolation_session` | state-aware | Unavailable on a stock build | Windows Insider build 26300.8553+ ([Insider Preview](https://learn.microsoft.com/en-us/windows-insider/release-notes/experimental/preview-build-26300-8553)). Only backend that supports the state-aware lifecycle. |
+| `lxc` / `bubblewrap` | `lxc` / `process` (Linux) | One-shot only | `lxc-exec` has no state-aware lifecycle — each spawn is a fresh container. |
+| `microvm` | `microvm` | Could not run | `nanvixd` is not included in the published `mxc-release-binaries.zip`. |
+| `hyperlight` | `vm` | Could not run | x86_64-only opt-in build flavor; not in default binaries, unavailable on ARM64. |
+
+### The state-aware lifecycle is `isolation_session`-only
+
+The provision → start → exec (many) → stop → deprovision lifecycle (`examples/05-state-aware-lifecycle`) is implemented only for `isolation_session` on Windows. On Linux the executor (`lxc-exec`) is one-shot and rejects a state-aware request with `Request error`. For every other backend, use the one-shot spawn APIs (`CreateConfigFromPolicy` + `SpawnSandboxFromConfig`). See upstream [State-Aware Sandboxes](https://github.com/microsoft/mxc/tree/main/docs/state-aware-lifecycle/).
+
+### Other notes
+
+- Omitting `policy.version` defaults to the newest schema (`0.7.0-alpha`), which selects the velocity tier on Windows and fails if the keys above aren't enabled. Pin `0.4.0-alpha` for the AppContainer fallback.
+- Network host allow/block lists (`network.allowedHosts` / `network.blockedHosts`) are not enforced on Windows — use `network.defaultPolicy` or `network.proxy` ([upstream](https://github.com/microsoft/mxc/blob/main/sdk/README.md#compatibility)).
+
+> **Verified on** Windows 11 ARM64 (Snapdragon X, build 26200) and WSL Ubuntu-24.04 (aarch64), against the v0.6.1 executor binaries. Backend availability and requirements are owned upstream and may change — treat the [microsoft/mxc SDK README](https://github.com/microsoft/mxc/blob/main/sdk/README.md) as the source of truth.
+
 ## Quickstart
 
 Start with a policy and turn it into the backend config that the native executor understands:
